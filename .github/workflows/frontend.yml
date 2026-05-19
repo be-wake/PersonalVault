@@ -4,9 +4,9 @@ on:
   push:
     branches: [main]
     paths:
-      - 'personal-data-vault/frontend/**'
+      - 'frontend/**'
       - '.github/workflows/frontend.yml'
-  workflow_dispatch:   # Allow manual re-deploy
+  workflow_dispatch:
 
 permissions:
   id-token: write   # Required for OIDC login
@@ -18,49 +18,9 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
 
-    defaults:
-      run:
-        working-directory: personal-data-vault/frontend
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: personal-data-vault/frontend/package-lock.json
-
-      - name: Install all dependencies (needed for build)
-        run: npm ci
-
-      - name: Build Next.js (standalone)
-        run: npm run build
-        env:
-          NEXT_PUBLIC_API_URL: https://${{ vars.BACKEND_APP_NAME }}.azurewebsites.net
-          # Tell Next.js it's running in production so it doesn't strip optimisations
-          NODE_ENV: production
-
-      # The standalone output lives at .next/standalone.
-      # We also need to copy over the static assets Next.js expects
-      # at runtime (public/ and .next/static/).
-      - name: Assemble deployment package
-        run: |
-          # Start with the self-contained standalone bundle
-          cp -r .next/standalone ./deploy
-
-          # Copy static files into the position Next.js expects at runtime
-          cp -r .next/static ./deploy/.next/static
-
-          # Copy public assets only if the directory exists
-          if [ -d public ]; then
-            cp -r public ./deploy/public
-          fi
-
-          echo "── deploy/ contents ──"
-          ls ./deploy
 
       - name: Login to Azure (OIDC)
         uses: azure/login@v2
@@ -69,8 +29,31 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Deploy to Azure App Service
-        uses: azure/webapps-deploy@v3
-        with:
-          app-name: ${{ vars.FRONTEND_APP_NAME }}
-          package: ./personal-data-vault/frontend/deploy
+      - name: Install Container Apps CLI extension
+        run: az extension add --name containerapp --upgrade -y
+
+      - name: Build & push image via ACR cloud build (NEXT_PUBLIC_API_URL baked in)
+        run: |
+          az acr build \
+            --registry pdvacrvivekverma \
+            --image pdv-frontend:${{ github.sha }} \
+            --image pdv-frontend:latest \
+            --file frontend/Dockerfile \
+            --build-arg NEXT_PUBLIC_API_URL=https://pdv-api.niceground-cc94fda7.eastus.azurecontainerapps.io \
+            ./frontend
+
+      - name: Deploy new image to Container App
+        run: |
+          az containerapp update \
+            --name pdv-web \
+            --resource-group pdv-rg \
+            --image pdvacrvivekverma.azurecr.io/pdv-frontend:${{ github.sha }}
+
+      - name: Print deployment summary
+        run: |
+          echo "## ✅ Frontend deployed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| | |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| Image | \`pdvacrvivekverma.azurecr.io/pdv-frontend:${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| URL   | https://pdv-web.niceground-cc94fda7.eastus.azurecontainerapps.io |" >> $GITHUB_STEP_SUMMARY
