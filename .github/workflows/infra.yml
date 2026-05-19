@@ -1,0 +1,81 @@
+name: Provision Azure Infrastructure
+
+on:
+  workflow_dispatch:          # Run manually from GitHub Actions UI
+    inputs:
+      app_suffix:
+        description: 'Unique suffix for resource names (e.g. vivekverma)'
+        required: true
+        default: 'vivekverma'
+      location:
+        description: 'Azure region'
+        required: true
+        default: 'eastus'
+
+permissions:
+  id-token: write   # Required for OIDC login
+  contents: read
+
+jobs:
+  provision:
+    name: Provision Azure Resources
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Login to Azure (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Create resource group
+        run: |
+          az group create \
+            --name ${{ vars.AZURE_RG }} \
+            --location ${{ github.event.inputs.location }} \
+            --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy Bicep infrastructure
+        id: deploy
+        run: |
+          output=$(az deployment group create \
+            --resource-group ${{ vars.AZURE_RG }} \
+            --template-file infra/main.bicep \
+            --parameters \
+                appSuffix=${{ github.event.inputs.app_suffix }} \
+                jwtSecret=${{ secrets.JWT_SECRET }} \
+            --output json)
+
+          echo "$output" | jq .
+
+          # Extract and expose the app names
+          backend=$(echo "$output"  | jq -r '.properties.outputs.backendAppName.value')
+          frontend=$(echo "$output" | jq -r '.properties.outputs.frontendAppName.value')
+          burl=$(echo "$output"     | jq -r '.properties.outputs.backendUrl.value')
+          furl=$(echo "$output"     | jq -r '.properties.outputs.frontendUrl.value')
+
+          echo "backend_app=$backend"   >> $GITHUB_OUTPUT
+          echo "frontend_app=$frontend" >> $GITHUB_OUTPUT
+          echo "backend_url=$burl"      >> $GITHUB_OUTPUT
+          echo "frontend_url=$furl"     >> $GITHUB_OUTPUT
+
+      - name: Print deployment summary
+        run: |
+          echo "## ✅ Infrastructure provisioned" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Resource | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| Backend App Name  | \`${{ steps.deploy.outputs.backend_app }}\` |"  >> $GITHUB_STEP_SUMMARY
+          echo "| Frontend App Name | \`${{ steps.deploy.outputs.frontend_app }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Backend URL  | ${{ steps.deploy.outputs.backend_url }} |"  >> $GITHUB_STEP_SUMMARY
+          echo "| Frontend URL | ${{ steps.deploy.outputs.frontend_url }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Next step" >> $GITHUB_STEP_SUMMARY
+          echo "Set these as GitHub Actions **Variables** (not secrets):" >> $GITHUB_STEP_SUMMARY
+          echo "- \`BACKEND_APP_NAME\`  = \`${{ steps.deploy.outputs.backend_app }}\`"  >> $GITHUB_STEP_SUMMARY
+          echo "- \`FRONTEND_APP_NAME\` = \`${{ steps.deploy.outputs.frontend_app }}\`" >> $GITHUB_STEP_SUMMARY

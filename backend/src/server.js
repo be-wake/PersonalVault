@@ -8,7 +8,20 @@ const app = express();
 const server = http.createServer(app);
 
 // ── Middleware ────────────────────────────────────────────────────────────────
-app.use(cors({ origin: ['http://localhost:3000', 'http://localhost:3001', 'http://127.0.0.1:3000', 'http://127.0.0.1:3001'], credentials: true }));
+// Allow extra origins from env (e.g. Azure frontend URL)
+const extraOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()).filter(Boolean)
+  : [];
+app.use(cors({
+  origin: [
+    'http://localhost:3000',
+    'http://localhost:3001',
+    'http://127.0.0.1:3000',
+    'http://127.0.0.1:3001',
+    ...extraOrigins,
+  ],
+  credentials: true,
+}));
 app.use(express.json());
 
 // Attach request ID

@@ -1,0 +1,76 @@
+name: Deploy Frontend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'personal-data-vault/frontend/**'
+      - '.github/workflows/frontend.yml'
+  workflow_dispatch:   # Allow manual re-deploy
+
+permissions:
+  id-token: write   # Required for OIDC login
+  contents: read
+
+jobs:
+  deploy:
+    name: Build & Deploy Frontend
+    runs-on: ubuntu-latest
+    environment: production
+
+    defaults:
+      run:
+        working-directory: personal-data-vault/frontend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: personal-data-vault/frontend/package-lock.json
+
+      - name: Install all dependencies (needed for build)
+        run: npm ci
+
+      - name: Build Next.js (standalone)
+        run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: https://${{ vars.BACKEND_APP_NAME }}.azurewebsites.net
+          # Tell Next.js it's running in production so it doesn't strip optimisations
+          NODE_ENV: production
+
+      # The standalone output lives at .next/standalone.
+      # We also need to copy over the static assets Next.js expects
+      # at runtime (public/ and .next/static/).
+      - name: Assemble deployment package
+        run: |
+          # Start with the self-contained standalone bundle
+          cp -r .next/standalone ./deploy
+
+          # Copy static files into the position Next.js expects at runtime
+          cp -r .next/static ./deploy/.next/static
+
+          # Copy public assets only if the directory exists
+          if [ -d public ]; then
+            cp -r public ./deploy/public
+          fi
+
+          echo "── deploy/ contents ──"
+          ls ./deploy
+
+      - name: Login to Azure (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy to Azure App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ vars.FRONTEND_APP_NAME }}
+          package: ./personal-data-vault/frontend/deploy
