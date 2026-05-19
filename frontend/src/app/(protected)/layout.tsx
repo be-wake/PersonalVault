@@ -2,9 +2,10 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { AuthProvider, useAuthState } from '@/lib/auth';
+import { useAuthState } from '@/lib/auth';
 import BottomNav from '@/components/BottomNav';
 
+// AuthProvider is mounted at the root layout — this guard just reads from it.
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuthState();
   const router = useRouter();
@@ -50,9 +51,5 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 }
 
 export default function ProtectedLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <AuthProvider>
-      <AuthGuard>{children}</AuthGuard>
-    </AuthProvider>
-  );
+  return <AuthGuard>{children}</AuthGuard>;
 }
