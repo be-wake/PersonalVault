@@ -9,7 +9,8 @@
       "distribution": "internal",
       "env": {
         "EXPO_PUBLIC_LOG_LEVEL": "debug",
-        "EXPO_PUBLIC_LOG_ENABLED": "true"
+        "EXPO_PUBLIC_LOG_ENABLED": "true",
+        "EXPO_PUBLIC_LOG_SHIP_ENABLED": "false"
       },
       "android": {
         "buildType": "apk",
@@ -20,7 +21,8 @@
       "distribution": "internal",
       "env": {
         "EXPO_PUBLIC_LOG_LEVEL": "info",
-        "EXPO_PUBLIC_LOG_ENABLED": "true"
+        "EXPO_PUBLIC_LOG_ENABLED": "true",
+        "EXPO_PUBLIC_LOG_SHIP_ENABLED": "true"
       },
       "android": {
         "buildType": "apk"
@@ -29,7 +31,8 @@
     "production": {
       "env": {
         "EXPO_PUBLIC_LOG_LEVEL": "warn",
-        "EXPO_PUBLIC_LOG_ENABLED": "true"
+        "EXPO_PUBLIC_LOG_ENABLED": "true",
+        "EXPO_PUBLIC_LOG_SHIP_ENABLED": "true"
       },
       "android": {
         "buildType": "app-bundle"

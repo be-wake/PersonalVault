@@ -46,6 +46,7 @@ app.use('/v1/consents',       require('./routes/consents'));
 app.use('/v1',                require('./routes/vault'));
 app.use('/v1/audit',          require('./routes/audit'));
 app.use('/v1/relying-parties', require('./routes/relyingParties'));
+app.use('/v1/logs',           require('./routes/logs'));
 
 // Health check (not logged — suppressed in requestLogger)
 app.get('/health', (_req, res) =>
