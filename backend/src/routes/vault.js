@@ -1,76 +1,75 @@
-const express = require('express');
+'use strict';
+
+const express  = require('express');
 const {
   getIdentity, upsertIdentity,
   getCurrentAddress, upsertAddress,
   getPaymentCards, addPaymentCard, removePaymentCard,
   getContacts, upsertContacts,
-  insertAuditEvent
+  insertAuditEvent,
 } = require('../db');
 const { verifyToken } = require('../middleware/auth');
+const logger   = require('../lib/logger');
 
+const log    = logger.child({ module: 'route:vault' });
 const router = express.Router();
 router.use(verifyToken);
 
+function forbidden(req, res) {
+  (req.log ?? log).warn(
+    { requesterId: req.user.sub, targetId: req.params.userId, path: req.path },
+    'Forbidden — vault access'
+  );
+  return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Access denied.' } });
+}
+
 // ─── IDENTITY ─────────────────────────────────────────────────────────────────
 
-// GET /v1/identity/:userId
 router.get('/identity/:userId', (req, res) => {
-  if (req.params.userId !== req.user.sub) {
-    return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Access denied.' } });
-  }
+  if (req.params.userId !== req.user.sub) return forbidden(req, res);
   const data = getIdentity(req.params.userId);
+  (req.log ?? log).debug({ userId: req.params.userId }, 'Read identity');
   res.json({ identity: data || {} });
 });
 
-// PUT /v1/identity/:userId
 router.put('/identity/:userId', (req, res) => {
-  if (req.params.userId !== req.user.sub) {
-    return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Access denied.' } });
-  }
+  if (req.params.userId !== req.user.sub) return forbidden(req, res);
   upsertIdentity(req.params.userId, req.body);
   insertAuditEvent(null, req.params.userId, 'ACCESS', 'user', req.params.userId, { resource: 'identity', action: 'UPDATE' });
   const updated = getIdentity(req.params.userId);
+  (req.log ?? log).info({ userId: req.params.userId }, 'Updated identity');
   res.json({ identity: updated });
 });
 
 // ─── ADDRESS ─────────────────────────────────────────────────────────────────
 
-// GET /v1/address/:userId
 router.get('/address/:userId', (req, res) => {
-  if (req.params.userId !== req.user.sub) {
-    return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Access denied.' } });
-  }
+  if (req.params.userId !== req.user.sub) return forbidden(req, res);
   const data = getCurrentAddress(req.params.userId);
+  (req.log ?? log).debug({ userId: req.params.userId }, 'Read address');
   res.json({ address: data || {} });
 });
 
-// PUT /v1/address/:userId
 router.put('/address/:userId', (req, res) => {
-  if (req.params.userId !== req.user.sub) {
-    return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Access denied.' } });
-  }
+  if (req.params.userId !== req.user.sub) return forbidden(req, res);
   upsertAddress(req.params.userId, req.body);
   insertAuditEvent(null, req.params.userId, 'ACCESS', 'user', req.params.userId, { resource: 'address', action: 'UPDATE' });
   const updated = getCurrentAddress(req.params.userId);
+  (req.log ?? log).info({ userId: req.params.userId }, 'Updated address');
   res.json({ address: updated });
 });
 
 // ─── PAYMENT ─────────────────────────────────────────────────────────────────
 
-// GET /v1/payment/:userId/cards
 router.get('/payment/:userId/cards', (req, res) => {
-  if (req.params.userId !== req.user.sub) {
-    return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Access denied.' } });
-  }
+  if (req.params.userId !== req.user.sub) return forbidden(req, res);
   const cards = getPaymentCards(req.params.userId);
+  (req.log ?? log).debug({ userId: req.params.userId, count: cards.length }, 'Read payment cards');
   res.json({ cards });
 });
 
-// POST /v1/payment/:userId/cards
 router.post('/payment/:userId/cards', (req, res) => {
-  if (req.params.userId !== req.user.sub) {
-    return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Access denied.' } });
-  }
+  if (req.params.userId !== req.user.sub) return forbidden(req, res);
   const { card_type, last_4, expiry_mm_yy } = req.body;
   if (!card_type || !last_4 || !expiry_mm_yy) {
     return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'card_type, last_4, and expiry_mm_yy are required.' } });
@@ -81,42 +80,38 @@ router.post('/payment/:userId/cards', (req, res) => {
   const cardId = addPaymentCard(req.params.userId, { card_type, last_4, expiry_mm_yy });
   insertAuditEvent(null, req.params.userId, 'ACCESS', 'user', req.params.userId, { resource: 'payment', action: 'ADD_CARD' });
   const cards = getPaymentCards(req.params.userId);
-  const card = cards.find(c => c.id === cardId);
+  const card  = cards.find(c => c.id === cardId);
+  (req.log ?? log).info({ userId: req.params.userId, cardId, cardType: card_type }, 'Added payment card');
   res.status(201).json({ card });
 });
 
-// DELETE /v1/payment/:userId/cards/:cardId
 router.delete('/payment/:userId/cards/:cardId', (req, res) => {
-  if (req.params.userId !== req.user.sub) {
-    return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Access denied.' } });
-  }
+  if (req.params.userId !== req.user.sub) return forbidden(req, res);
   const removed = removePaymentCard(req.params.userId, req.params.cardId);
   if (!removed) {
+    (req.log ?? log).debug({ userId: req.params.userId, cardId: req.params.cardId }, 'Remove card — not found');
     return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Card not found.' } });
   }
   insertAuditEvent(null, req.params.userId, 'ACCESS', 'user', req.params.userId, { resource: 'payment', action: 'REMOVE_CARD' });
+  (req.log ?? log).info({ userId: req.params.userId, cardId: req.params.cardId }, 'Removed payment card');
   res.json({ success: true });
 });
 
 // ─── CONTACTS ────────────────────────────────────────────────────────────────
 
-// GET /v1/contacts/:userId
 router.get('/contacts/:userId', (req, res) => {
-  if (req.params.userId !== req.user.sub) {
-    return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Access denied.' } });
-  }
+  if (req.params.userId !== req.user.sub) return forbidden(req, res);
   const data = getContacts(req.params.userId);
+  (req.log ?? log).debug({ userId: req.params.userId }, 'Read contacts');
   res.json({ contacts: data || {} });
 });
 
-// PUT /v1/contacts/:userId
 router.put('/contacts/:userId', (req, res) => {
-  if (req.params.userId !== req.user.sub) {
-    return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Access denied.' } });
-  }
+  if (req.params.userId !== req.user.sub) return forbidden(req, res);
   upsertContacts(req.params.userId, req.body);
   insertAuditEvent(null, req.params.userId, 'ACCESS', 'user', req.params.userId, { resource: 'contacts', action: 'UPDATE' });
   const updated = getContacts(req.params.userId);
+  (req.log ?? log).info({ userId: req.params.userId }, 'Updated contacts');
   res.json({ contacts: updated });
 });
 

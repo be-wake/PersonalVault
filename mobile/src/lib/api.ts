@@ -1,4 +1,7 @@
 import * as SecureStore from 'expo-secure-store';
+import createLogger from './logger';
+
+const log = createLogger('api');
 
 export const API_URL = 'https://pdv-api.niceground-cc94fda7.eastus.azurecontainerapps.io';
 
@@ -14,16 +17,33 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   };
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  const res = await fetch(`${API_URL}${path}`, { ...options, headers });
+  const method = (options.method ?? 'GET').toUpperCase();
+  log.debug(`→ ${method} ${path}`);
+
+  let res: Response;
+  const startMs = Date.now();
+  try {
+    res = await fetch(`${API_URL}${path}`, { ...options, headers });
+  } catch (networkErr: unknown) {
+    const msg = networkErr instanceof Error ? networkErr.message : String(networkErr);
+    log.error(`Network error on ${method} ${path}`, { error: msg });
+    throw networkErr;
+  }
+
+  const durationMs = Date.now() - startMs;
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    const msg = body?.error?.message || `HTTP ${res.status}`;
+    const msg  = body?.error?.message || `HTTP ${res.status}`;
+    const code = body?.error?.code;
+    log.warn(`← ${method} ${path} ${res.status} (${durationMs}ms)`, { code, message: msg });
     const err = new Error(msg) as Error & { code?: string; status?: number };
-    err.code = body?.error?.code;
+    err.code   = code;
     err.status = res.status;
     throw err;
   }
+
+  log.debug(`← ${method} ${path} ${res.status} (${durationMs}ms)`);
   return res.json() as T;
 }
 
