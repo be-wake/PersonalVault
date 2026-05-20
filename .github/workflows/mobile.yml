@@ -1,0 +1,72 @@
+name: Build Android App
+
+# Triggers:
+#   1. Manual run — choose any profile (development / preview / production)
+#   2. Version tag   e.g. git tag v1.0.0 && git push --tags → production AAB
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: 'EAS build profile'
+        required: true
+        default: 'preview'
+        type: choice
+        options:
+          - development
+          - preview
+          - production
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: EAS Android Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Set up EAS CLI
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      # On a version tag → production AAB for Play Store
+      # On workflow_dispatch → whatever profile was chosen
+      - name: Resolve build profile
+        id: profile
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            echo "profile=production" >> $GITHUB_OUTPUT
+          else
+            echo "profile=${{ github.event.inputs.profile }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run EAS Build
+        run: eas build --platform android --profile ${{ steps.profile.outputs.profile }} --non-interactive
+
+      - name: Submit to Play Store
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          # Uncomment once google-service-account.json is uploaded as an EAS secret:
+          # eas submit --platform android --profile production --non-interactive
+          echo "Build done. To submit: eas submit --platform android --profile production"
