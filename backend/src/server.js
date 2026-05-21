@@ -2,39 +2,68 @@
 
 const express       = require('express');
 const cors          = require('cors');
+const helmet        = require('helmet');
 const http          = require('http');
 const { v4: uuidv4 } = require('uuid');
 const logger        = require('./lib/logger');
 const requestLogger = require('./middleware/requestLogger');
+const { authLimiter, apiLimiter, logsLimiter } = require('./middleware/rateLimit');
 const { attachWebSocket } = require('./ws');
 const db            = require('./db');
 
-const log = logger.child({ module: 'server' });
+const log     = logger.child({ module: 'server' });
+const IS_PROD = process.env.NODE_ENV === 'production';
 
 const app    = express();
 const server = http.createServer(app);
 
-// ── Middleware ────────────────────────────────────────────────────────────────
+// Behind Azure Container Apps / Front Door we sit behind a reverse proxy, so
+// trust one proxy hop for correct req.ip — needed by the rate limiter.
+app.set('trust proxy', 1);
+
+// ── Security headers ─────────────────────────────────────────────────────────
+// API serves JSON only — no inline scripts, no cross-origin frames.
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+}));
+
+// ── CORS ─────────────────────────────────────────────────────────────────────
+// Localhost origins are allowed only outside production. ALLOWED_ORIGINS is a
+// comma-separated list of additional permitted origins (e.g. the deployed web
+// app and any whitelisted RP frontends).
 const extraOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()).filter(Boolean)
   : [];
 
+const corsOrigins = IS_PROD
+  ? extraOrigins
+  : [
+      'http://localhost:3000',
+      'http://localhost:3001',
+      'http://127.0.0.1:3000',
+      'http://127.0.0.1:3001',
+      ...extraOrigins,
+    ];
+
+if (IS_PROD && corsOrigins.length === 0) {
+  log.warn('ALLOWED_ORIGINS is empty in production — no browser will be able to call this API.');
+}
+
 app.use(cors({
-  origin: [
-    'http://localhost:3000',
-    'http://localhost:3001',
-    'http://127.0.0.1:3000',
-    'http://127.0.0.1:3001',
-    ...extraOrigins,
-  ],
+  origin: corsOrigins,
   credentials: true,
 }));
 
-app.use(express.json());
+// Cap request body at 64 KB — vault payloads are tiny. Stops one giant POST
+// from pinning a worker. /v1/logs accepts batches and overrides this below.
+app.use(express.json({ limit: '64kb' }));
 
-// Attach a unique request ID before the HTTP logger so it appears in every line
-app.use((req, _res, next) => {
+// Attach a unique request ID before the HTTP logger so it appears in every line.
+// Echo back as X-Request-Id so clients can correlate without parsing errors.
+app.use((req, res, next) => {
   req.id = uuidv4();
+  res.setHeader('X-Request-Id', req.id);
   next();
 });
 
@@ -42,12 +71,18 @@ app.use((req, _res, next) => {
 app.use(requestLogger);
 
 // ── Routes ────────────────────────────────────────────────────────────────────
-app.use('/auth',              require('./routes/auth'));
-app.use('/v1/consents',       require('./routes/consents'));
-app.use('/v1',                require('./routes/vault'));
-app.use('/v1/audit',          require('./routes/audit'));
-app.use('/v1/relying-parties', require('./routes/relyingParties'));
-app.use('/v1/logs',           require('./routes/logs'));
+// Per-bucket rate limits: auth and the mobile log ingest are the hottest abuse
+// targets. /v1/logs raises the JSON limit to 256 KB to fit a 200-entry batch.
+app.use('/auth',              authLimiter, require('./routes/auth'));
+app.use('/v1/consents',       apiLimiter,  require('./routes/consents'));
+app.use('/v1',                apiLimiter,  require('./routes/vault'));
+app.use('/v1/audit',          apiLimiter,  require('./routes/audit'));
+app.use('/v1/relying-parties', apiLimiter, require('./routes/relyingParties'));
+app.use('/v1/logs',
+  express.json({ limit: '256kb' }),
+  logsLimiter,
+  require('./routes/logs')
+);
 
 // Health check (not logged — suppressed in requestLogger)
 app.get('/health', (_req, res) =>
@@ -96,18 +131,41 @@ async function start() {
 
 start();
 
-// Graceful shutdown
-function shutdown(signal) {
-  log.info({ signal }, 'Shutting down…');
-  server.close(async () => {
+// ── Graceful shutdown ────────────────────────────────────────────────────────
+// On SIGTERM (sent by Container Apps before a revision swap) we stop accepting
+// new connections, wait for the HTTP server to finish in-flight requests, then
+// drain the DB pool. A hard exit follows after SHUTDOWN_TIMEOUT_MS as a backstop
+// for hung clients.
+const SHUTDOWN_TIMEOUT_MS = Number(process.env.SHUTDOWN_TIMEOUT_MS) || 15_000;
+let shuttingDown = false;
+
+async function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+
+  log.info({ signal, timeoutMs: SHUTDOWN_TIMEOUT_MS }, 'Shutting down…');
+
+  const forceTimer = setTimeout(() => {
+    log.warn('Shutdown timed out — forcing exit');
+    process.exit(1);
+  }, SHUTDOWN_TIMEOUT_MS);
+  forceTimer.unref();
+
+  try {
+    await new Promise((resolve) => server.close(resolve));
     log.info('HTTP server closed');
-    try { await db.close(); log.info('DB pool closed'); } catch {}
+    await db.close();
+    log.info('DB pool closed');
     process.exit(0);
-  });
+  } catch (err) {
+    log.error({ err }, 'Error during shutdown');
+    process.exit(1);
+  }
 }
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT',  () => shutdown('SIGINT'));
 
-// Catch uncaught errors so they get logged before the process crashes
-process.on('uncaughtException',  (err) => { log.fatal({ err }, 'Uncaught exception');  process.exit(1); });
-process.on('unhandledRejection', (err) => { log.fatal({ err }, 'Unhandled rejection'); process.exit(1); });
+// Catch uncaught errors so they get logged before the process crashes.
+// We treat them as fatal but go through `shutdown()` so the pool is drained.
+process.on('uncaughtException',  (err) => { log.fatal({ err }, 'Uncaught exception');  shutdown('uncaughtException').catch(() => process.exit(1)); });
+process.on('unhandledRejection', (err) => { log.fatal({ err }, 'Unhandled rejection'); shutdown('unhandledRejection').catch(() => process.exit(1)); });

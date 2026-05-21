@@ -31,26 +31,46 @@ export default function ConsentDetailPage() {
       .catch(() => router.replace('/consents'))
       .finally(() => setLoading(false));
 
-    // WebSocket for real-time revocation updates
+    // WebSocket for real-time revocation updates.
+    // Derive ws(s):// from the same base the REST API uses so dev
+    // (http://localhost:4000) and prod (https://… → wss://…) both work.
     const token = localStorage.getItem('pdv_token');
     if (token) {
-      const ws = new WebSocket(`ws://localhost:4000/v1/ws?token=${token}`);
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+      const wsBase  = apiBase.replace(/^http/, 'ws');
+      const ws = new WebSocket(`${wsBase}/v1/ws?token=${encodeURIComponent(token)}`);
       wsRef.current = ws;
       ws.onmessage = (evt) => {
         try {
           const msg = JSON.parse(evt.data);
-          if (msg.event === 'consent.revoked' && msg.grantId === grantId) {
-            setGrant((g) => g ? { ...g, status: 'REVOKED' } : g);
+          // Backend currently broadcasts { type: 'CONSENT_REVOKED', grant }.
+          // Accept the legacy { event: 'consent.revoked', grantId } shape too
+          // so older backends keep working during a rolling deploy.
+          const isRevoke =
+            msg?.type === 'CONSENT_REVOKED' ||
+            msg?.event === 'consent.revoked';
+          const affectedId = msg?.grant?.id ?? msg?.grantId;
+          if (isRevoke && affectedId === grantId) {
+            setGrant((g) =>
+              g
+                ? { ...g, status: 'REVOKED', revoked_at: msg?.grant?.revoked_at ?? new Date().toISOString() }
+                : g,
+            );
           }
-        } catch {}
+        } catch {
+          /* ignore malformed messages */
+        }
       };
     }
     return () => wsRef.current?.close();
   }, [user, grantId, router]);
 
   async function handleRevoke() {
+    // SECURITY-PLACEHOLDER: see /consents/grant page — same caveat applies.
+    // The backend currently accepts DELETE /v1/consents/:id with only a normal
+    // access token; this PIN is purely cosmetic. Replace with X-PDV-Stepup.
     if (pin !== '1234') {
-      setPinError('Incorrect PIN. Use 1234 for demo.');
+      setPinError('Incorrect PIN. (Demo placeholder: enter 1234.)');
       return;
     }
     setPinError('');
@@ -209,7 +229,9 @@ export default function ConsentDetailPage() {
                 autoFocus
               />
               {pinError && <div className="form-error" style={{ marginTop: 6 }}>{pinError}</div>}
-              <p style={{ fontSize: 11, color: 'var(--color-text-3)', marginTop: 6, textAlign: 'center' }}>Demo PIN: 1234</p>
+              <p style={{ fontSize: 11, color: 'var(--color-amber)', marginTop: 6, textAlign: 'center' }}>
+                ⚠ Demo placeholder — not real security. Enter 1234.
+              </p>
             </div>
 
             <div style={{ display: 'flex', gap: 12 }}>

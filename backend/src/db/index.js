@@ -404,7 +404,22 @@ async function insertAuditEvent(grantId, userId, eventType, actorType, actorId, 
   return id;
 }
 
-async function getAuditEvents(userId, { from, to, limit = 50 } = {}) {
+/**
+ * Fetch audit events for a user, with optional filters.
+ *
+ * @param {string} userId
+ * @param {object} opts
+ * @param {string} [opts.from]      ISO timestamp lower bound
+ * @param {string} [opts.to]        ISO timestamp upper bound
+ * @param {number} [opts.limit=50]  clamp 1..200
+ * @param {string} [opts.resource]  filter to events related to a resource
+ *                                  ('identity' | 'address' | 'payment' |
+ *                                   'contacts' | 'consent')
+ */
+async function getAuditEvents(userId, { from, to, limit = 50, resource } = {}) {
+  // Clamp limit so callers can't request unbounded scans.
+  const safeLimit = Math.max(1, Math.min(Number(limit) || 50, 200));
+
   let query = `
     SELECT ae.*, cg.relying_party_id,
       rp.name as rp_name, rp.domain as rp_domain
@@ -419,8 +434,27 @@ async function getAuditEvents(userId, { from, to, limit = 50 } = {}) {
   if (from) { query += ` AND ae.ts >= $${idx++}`; params.push(from); }
   if (to)   { query += ` AND ae.ts <= $${idx++}`; params.push(to); }
 
+  // Resource filter:
+  //   - 'consent' matches the grant-lifecycle events regardless of metadata.
+  //   - 'identity' | 'address' | 'payment' | 'contacts' match
+  //     ACCESS events whose metadata.resource equals that value.
+  //
+  // metadata_json is TEXT today (see ADR: planned move to JSONB). We
+  // therefore match with a portable JSON-substring approach that does not
+  // depend on jsonb operators, but is exact via the leading "resource":"…"
+  // pattern produced by our serialiser.
+  if (resource) {
+    const r = String(resource).toLowerCase();
+    if (r === 'consent') {
+      query += ` AND ae.event_type IN ('GRANT_CREATED','REVOKED','EXPIRED','SCOPE_CHANGED','GRANT_RENEWED')`;
+    } else {
+      query += ` AND ae.event_type = 'ACCESS' AND ae.metadata_json LIKE $${idx++}`;
+      params.push(`%"resource":"${r}"%`);
+    }
+  }
+
   query += ` ORDER BY ae.ts DESC LIMIT $${idx}`;
-  params.push(limit);
+  params.push(safeLimit);
 
   const { rows } = await pool.query(query, params);
   return rows.map(e => ({

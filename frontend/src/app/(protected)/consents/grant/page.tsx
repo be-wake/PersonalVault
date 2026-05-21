@@ -60,8 +60,14 @@ export default function GrantPage() {
   }
 
   async function handleGrant() {
+    // SECURITY-PLACEHOLDER: Demo-only PIN check. This is client-side and the
+    // backend does not enforce step-up auth on POST /v1/consents — anyone with
+    // a valid access token can grant a consent without ever seeing this prompt.
+    // Replace with a server-issued step-up token (X-PDV-Stepup) once the
+    // backend stepUp middleware is wired in. Tracked in
+    // PRODUCTION_READINESS_REVIEW.md §S2.
     if (pin !== '1234') {
-      setPinError('Incorrect PIN. Use 1234 for demo.');
+      setPinError('Incorrect PIN. (Demo placeholder: enter 1234.)');
       return;
     }
     if (!user || !selectedRp) return;
@@ -274,7 +280,9 @@ export default function GrantPage() {
               autoFocus
             />
             {pinError && <div className="form-error" style={{ marginTop: 6 }}>{pinError}</div>}
-            <p style={{ fontSize: 11, color: 'var(--color-text-3)', marginTop: 6, textAlign: 'center' }}>Demo PIN: 1234</p>
+            <p style={{ fontSize: 11, color: 'var(--color-amber)', marginTop: 6, textAlign: 'center' }}>
+              ⚠ Demo placeholder — not real security. Enter 1234.
+            </p>
           </div>
 
           <Button variant="primary" fullWidth loading={granting} onClick={handleGrant}>

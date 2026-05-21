@@ -1,11 +1,62 @@
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
+// ── Token storage ────────────────────────────────────────────────────────────
+// localStorage is XSS-vulnerable; see PRODUCTION_READINESS_REVIEW.md §S1 for
+// the planned move to httpOnly cookies. Centralised here so that migration
+// becomes a one-place change.
+const TOKEN_KEY         = 'pdv_token';
+const REFRESH_TOKEN_KEY = 'pdv_refresh_token';
+
 function getToken(): string | null {
   if (typeof window === 'undefined') return null;
-  return localStorage.getItem('pdv_token');
+  return localStorage.getItem(TOKEN_KEY);
+}
+function getRefreshToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem(REFRESH_TOKEN_KEY);
+}
+export function storeTokens(accessToken: string, refreshToken?: string | null) {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(TOKEN_KEY, accessToken);
+  if (refreshToken) localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+}
+export function clearTokens() {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(REFRESH_TOKEN_KEY);
+  localStorage.removeItem('pdv_user');
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+// ── Refresh-token rotation ───────────────────────────────────────────────────
+// Concurrent requests that all get 401 should share a single /auth/refresh
+// call instead of stampeding the backend.
+let inflightRefresh: Promise<string | null> | null = null;
+
+async function refreshAccessToken(): Promise<string | null> {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) return null;
+  try {
+    const res = await fetch(`${BASE_URL}/auth/refresh`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ refreshToken }),
+    });
+    if (!res.ok) {
+      // Refresh token itself is invalid/expired — drop everything; the
+      // AuthProvider's next /auth/me will redirect to sign-in.
+      clearTokens();
+      return null;
+    }
+    const body = await res.json() as { accessToken: string };
+    if (typeof window !== 'undefined') localStorage.setItem(TOKEN_KEY, body.accessToken);
+    return body.accessToken;
+  } catch {
+    clearTokens();
+    return null;
+  }
+}
+
+async function request<T>(path: string, options: RequestInit = {}, _retried = false): Promise<T> {
   const token = getToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -14,6 +65,15 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
   const res = await fetch(`${BASE_URL}${path}`, { ...options, headers });
+
+  // On 401 from a protected endpoint, try a single refresh-then-retry.
+  // Skip /auth/* so /auth/refresh failures don't loop and /auth/login 401s
+  // (bad credentials) surface immediately.
+  if (res.status === 401 && !_retried && getRefreshToken() && !path.startsWith('/auth/')) {
+    inflightRefresh ??= refreshAccessToken().finally(() => { inflightRefresh = null; });
+    const fresh = await inflightRefresh;
+    if (fresh) return request<T>(path, options, true);
+  }
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));

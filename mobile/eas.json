@@ -8,6 +8,7 @@
       "developmentClient": true,
       "distribution": "internal",
       "env": {
+        "EXPO_PUBLIC_API_URL": "https://pdv-api-dev.niceground-cc94fda7.eastus.azurecontainerapps.io",
         "EXPO_PUBLIC_LOG_LEVEL": "debug",
         "EXPO_PUBLIC_LOG_ENABLED": "true",
         "EXPO_PUBLIC_LOG_SHIP_ENABLED": "false"
@@ -20,6 +21,7 @@
     "preview": {
       "distribution": "internal",
       "env": {
+        "EXPO_PUBLIC_API_URL": "https://pdv-api-staging.niceground-cc94fda7.eastus.azurecontainerapps.io",
         "EXPO_PUBLIC_LOG_LEVEL": "info",
         "EXPO_PUBLIC_LOG_ENABLED": "true",
         "EXPO_PUBLIC_LOG_SHIP_ENABLED": "true"
@@ -30,6 +32,7 @@
     },
     "production": {
       "env": {
+        "EXPO_PUBLIC_API_URL": "https://pdv-api.niceground-cc94fda7.eastus.azurecontainerapps.io",
         "EXPO_PUBLIC_LOG_LEVEL": "warn",
         "EXPO_PUBLIC_LOG_ENABLED": "true",
         "EXPO_PUBLIC_LOG_SHIP_ENABLED": "true"

@@ -10,17 +10,29 @@ router.use(verifyToken);
 // Propagates async errors to Express's global error handler
 const wrap = fn => (req, res, next) => fn(req, res, next).catch(next);
 
-// GET /v1/audit/:userId?from=&to=&limit=
+// GET /v1/audit/:userId?from=&to=&limit=&resource=
+//   resource: identity | address | payment | contacts | consent
 router.get('/:userId', wrap(async (req, res) => {
   if (req.params.userId !== req.user.sub) {
     return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Access denied.' } });
   }
 
-  const { from, to, limit } = req.query;
+  const { from, to, limit, resource } = req.query;
+
+  // Defend against unexpected resource values reaching the DB helper.
+  const ALLOWED_RESOURCES = new Set(['identity', 'address', 'payment', 'contacts', 'consent']);
+  const normalisedResource = resource ? String(resource).toLowerCase() : null;
+  if (normalisedResource && !ALLOWED_RESOURCES.has(normalisedResource)) {
+    return res.status(400).json({
+      error: { code: 'VALIDATION_ERROR', message: `resource must be one of: ${[...ALLOWED_RESOURCES].join(', ')}` },
+    });
+  }
+
   const events = await getAuditEvents(req.params.userId, {
-    from:  from  || null,
-    to:    to    || null,
-    limit: limit ? parseInt(limit, 10) : 50,
+    from:     from  || null,
+    to:       to    || null,
+    limit:    limit ? parseInt(limit, 10) : 50,
+    resource: normalisedResource,
   });
 
   // Build human-readable labels from event type and metadata

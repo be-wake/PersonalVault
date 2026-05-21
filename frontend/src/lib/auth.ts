@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from 'react';
 import type { User } from './api';
-import { auth as authApi } from './api';
+import { auth as authApi, storeTokens, clearTokens } from './api';
 
 interface AuthState {
   user: User | null;
@@ -47,33 +47,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
       return;
     }
+    // /auth/me will trigger the refresh-token flow if the access token has
+    // expired (handled inside lib/api.ts). If both tokens are gone, we land
+    // in the catch block and clear local state.
     authApi
       .me()
       .then(({ user: u }) => setUser(u))
-      .catch(() => {
-        localStorage.removeItem('pdv_token');
-        localStorage.removeItem('pdv_user');
-      })
+      .catch(() => clearTokens())
       .finally(() => setLoading(false));
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
-    const { accessToken, user: u } = await authApi.login(email, password);
-    localStorage.setItem('pdv_token', accessToken);
+    const { accessToken, refreshToken, user: u } = await authApi.login(email, password);
+    storeTokens(accessToken, refreshToken);
     localStorage.setItem('pdv_user', JSON.stringify(u));
     setUser(u);
   }, []);
 
   const register = useCallback(async (name: string, email: string, password: string) => {
-    const { accessToken, user: u } = await authApi.register(name, email, password);
-    localStorage.setItem('pdv_token', accessToken);
+    const { accessToken, refreshToken, user: u } = await authApi.register(name, email, password);
+    storeTokens(accessToken, refreshToken);
     localStorage.setItem('pdv_user', JSON.stringify(u));
     setUser(u);
   }, []);
 
   const logout = useCallback(() => {
-    localStorage.removeItem('pdv_token');
-    localStorage.removeItem('pdv_user');
+    clearTokens();
     setUser(null);
   }, []);
 

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import * as SecureStore from 'expo-secure-store';
-import { auth as authApi, User } from './api';
+import { auth as authApi, User, storeTokens, clearTokens } from './api';
 import createLogger from './logger';
 
 const log = createLogger('auth');
@@ -13,7 +13,7 @@ interface AuthContextType {
   logout: () => Promise<void>;
 }
 
-const TOKEN_KEY = 'pdv_token';
+const TOKEN_KEY = 'pdv_token';   // kept for the session-restore probe
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
@@ -43,7 +43,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         log.warn('Session restore failed — clearing token', { error: msg });
-        await SecureStore.deleteItemAsync(TOKEN_KEY).catch(() => {});
+        await clearTokens();
       } finally {
         setIsLoading(false);
       }
@@ -53,8 +53,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = useCallback(async (email: string, password: string) => {
     log.debug('Attempting login', { email });
     try {
-      const { accessToken, user: u } = await authApi.login(email, password);
-      await SecureStore.setItemAsync(TOKEN_KEY, accessToken);
+      const { accessToken, refreshToken, user: u } = await authApi.login(email, password);
+      await storeTokens(accessToken, refreshToken);
       setUser(u);
       log.info('Login successful', { userId: u.id, email: u.email });
     } catch (err: unknown) {
@@ -67,8 +67,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const register = useCallback(async (name: string, email: string, password: string) => {
     log.debug('Attempting registration', { email });
     try {
-      const { accessToken, user: u } = await authApi.register(name, email, password);
-      await SecureStore.setItemAsync(TOKEN_KEY, accessToken);
+      const { accessToken, refreshToken, user: u } = await authApi.register(name, email, password);
+      await storeTokens(accessToken, refreshToken);
       setUser(u);
       log.info('Registration successful', { userId: u.id, email: u.email });
     } catch (err: unknown) {
@@ -80,7 +80,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(async () => {
     const userId = user?.id;
-    await SecureStore.deleteItemAsync(TOKEN_KEY).catch(() => {});
+    await clearTokens();
     setUser(null);
     log.info('User logged out', { userId });
   }, [user]);

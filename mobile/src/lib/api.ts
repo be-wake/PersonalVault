@@ -3,13 +3,68 @@ import createLogger from './logger';
 
 const log = createLogger('api');
 
-export const API_URL = 'https://pdv-api.niceground-cc94fda7.eastus.azurecontainerapps.io';
+// API base URL is configured per EAS build profile via `EXPO_PUBLIC_API_URL`
+// (see eas.json). The fallback keeps `expo start` working when no .env is set.
+//
+// EXPO_PUBLIC_* is resolved at bundle time, so each Play Store build is pinned
+// to the URL that was set when it was built — exactly what we want.
+export const API_URL =
+  process.env.EXPO_PUBLIC_API_URL ||
+  'https://pdv-api.niceground-cc94fda7.eastus.azurecontainerapps.io';
 
-async function getToken(): Promise<string | null> {
-  return SecureStore.getItemAsync('pdv_token');
+if (!process.env.EXPO_PUBLIC_API_URL) {
+  log.warn('EXPO_PUBLIC_API_URL not set — using deployed default. Set it in eas.json or .env to target a different backend.');
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+// ── Token storage (SecureStore) ──────────────────────────────────────────────
+const TOKEN_KEY         = 'pdv_token';
+const REFRESH_TOKEN_KEY = 'pdv_refresh_token';
+
+async function getToken(): Promise<string | null> {
+  return SecureStore.getItemAsync(TOKEN_KEY);
+}
+async function getRefreshTokenStored(): Promise<string | null> {
+  return SecureStore.getItemAsync(REFRESH_TOKEN_KEY);
+}
+
+export async function storeTokens(accessToken: string, refreshToken?: string | null) {
+  await SecureStore.setItemAsync(TOKEN_KEY, accessToken);
+  if (refreshToken) await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, refreshToken);
+}
+export async function clearTokens() {
+  await SecureStore.deleteItemAsync(TOKEN_KEY).catch(() => {});
+  await SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY).catch(() => {});
+}
+
+// ── Refresh-token rotation ───────────────────────────────────────────────────
+// Single concurrent refresh shared by all in-flight 401s.
+let inflightRefresh: Promise<string | null> | null = null;
+
+async function refreshAccessToken(): Promise<string | null> {
+  const refreshToken = await getRefreshTokenStored();
+  if (!refreshToken) return null;
+  try {
+    const res = await fetch(`${API_URL}/auth/refresh`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ refreshToken }),
+    });
+    if (!res.ok) {
+      log.warn('Refresh token rejected — clearing session', { status: res.status });
+      await clearTokens();
+      return null;
+    }
+    const body = (await res.json()) as { accessToken: string };
+    await SecureStore.setItemAsync(TOKEN_KEY, body.accessToken);
+    return body.accessToken;
+  } catch (err: unknown) {
+    log.warn('Refresh request failed', { error: err instanceof Error ? err.message : String(err) });
+    await clearTokens();
+    return null;
+  }
+}
+
+async function request<T>(path: string, options: RequestInit = {}, _retried = false): Promise<T> {
   const token = await getToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -32,6 +87,17 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   const durationMs = Date.now() - startMs;
 
+  // On 401 for a protected route, attempt a single refresh-then-retry.
+  if (res.status === 401 && !_retried && !path.startsWith('/auth/')) {
+    if (!inflightRefresh) {
+      inflightRefresh = refreshAccessToken().finally(() => { inflightRefresh = null; });
+    }
+    const fresh = await inflightRefresh;
+    if (fresh) {
+      return request<T>(path, options, true);
+    }
+  }
+
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     const msg  = body?.error?.message || `HTTP ${res.status}`;
@@ -50,12 +116,12 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 // ── Auth ──────────────────────────────────────────────────────────────────────
 export const auth = {
   register: (name: string, email: string, password: string) =>
-    request<{ accessToken: string; user: User }>('/auth/register', {
+    request<{ accessToken: string; refreshToken: string; user: User }>('/auth/register', {
       method: 'POST',
       body: JSON.stringify({ name, email, password }),
     }),
   login: (email: string, password: string) =>
-    request<{ accessToken: string; user: User }>('/auth/login', {
+    request<{ accessToken: string; refreshToken: string; user: User }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     }),
