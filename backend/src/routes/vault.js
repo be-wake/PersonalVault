@@ -15,6 +15,9 @@ const log    = logger.child({ module: 'route:vault' });
 const router = express.Router();
 router.use(verifyToken);
 
+// Propagates async errors to Express's global error handler
+const wrap = fn => (req, res, next) => fn(req, res, next).catch(next);
+
 function forbidden(req, res) {
   (req.log ?? log).warn(
     { requesterId: req.user.sub, targetId: req.params.userId, path: req.path },
@@ -25,50 +28,50 @@ function forbidden(req, res) {
 
 // ─── IDENTITY ─────────────────────────────────────────────────────────────────
 
-router.get('/identity/:userId', (req, res) => {
+router.get('/identity/:userId', wrap(async (req, res) => {
   if (req.params.userId !== req.user.sub) return forbidden(req, res);
-  const data = getIdentity(req.params.userId);
+  const data = await getIdentity(req.params.userId);
   (req.log ?? log).debug({ userId: req.params.userId }, 'Read identity');
   res.json({ identity: data || {} });
-});
+}));
 
-router.put('/identity/:userId', (req, res) => {
+router.put('/identity/:userId', wrap(async (req, res) => {
   if (req.params.userId !== req.user.sub) return forbidden(req, res);
-  upsertIdentity(req.params.userId, req.body);
-  insertAuditEvent(null, req.params.userId, 'ACCESS', 'user', req.params.userId, { resource: 'identity', action: 'UPDATE' });
-  const updated = getIdentity(req.params.userId);
+  await upsertIdentity(req.params.userId, req.body);
+  await insertAuditEvent(null, req.params.userId, 'ACCESS', 'user', req.params.userId, { resource: 'identity', action: 'UPDATE' });
+  const updated = await getIdentity(req.params.userId);
   (req.log ?? log).info({ userId: req.params.userId }, 'Updated identity');
   res.json({ identity: updated });
-});
+}));
 
 // ─── ADDRESS ─────────────────────────────────────────────────────────────────
 
-router.get('/address/:userId', (req, res) => {
+router.get('/address/:userId', wrap(async (req, res) => {
   if (req.params.userId !== req.user.sub) return forbidden(req, res);
-  const data = getCurrentAddress(req.params.userId);
+  const data = await getCurrentAddress(req.params.userId);
   (req.log ?? log).debug({ userId: req.params.userId }, 'Read address');
   res.json({ address: data || {} });
-});
+}));
 
-router.put('/address/:userId', (req, res) => {
+router.put('/address/:userId', wrap(async (req, res) => {
   if (req.params.userId !== req.user.sub) return forbidden(req, res);
-  upsertAddress(req.params.userId, req.body);
-  insertAuditEvent(null, req.params.userId, 'ACCESS', 'user', req.params.userId, { resource: 'address', action: 'UPDATE' });
-  const updated = getCurrentAddress(req.params.userId);
+  await upsertAddress(req.params.userId, req.body);
+  await insertAuditEvent(null, req.params.userId, 'ACCESS', 'user', req.params.userId, { resource: 'address', action: 'UPDATE' });
+  const updated = await getCurrentAddress(req.params.userId);
   (req.log ?? log).info({ userId: req.params.userId }, 'Updated address');
   res.json({ address: updated });
-});
+}));
 
 // ─── PAYMENT ─────────────────────────────────────────────────────────────────
 
-router.get('/payment/:userId/cards', (req, res) => {
+router.get('/payment/:userId/cards', wrap(async (req, res) => {
   if (req.params.userId !== req.user.sub) return forbidden(req, res);
-  const cards = getPaymentCards(req.params.userId);
+  const cards = await getPaymentCards(req.params.userId);
   (req.log ?? log).debug({ userId: req.params.userId, count: cards.length }, 'Read payment cards');
   res.json({ cards });
-});
+}));
 
-router.post('/payment/:userId/cards', (req, res) => {
+router.post('/payment/:userId/cards', wrap(async (req, res) => {
   if (req.params.userId !== req.user.sub) return forbidden(req, res);
   const { card_type, last_4, expiry_mm_yy } = req.body;
   if (!card_type || !last_4 || !expiry_mm_yy) {
@@ -77,42 +80,42 @@ router.post('/payment/:userId/cards', (req, res) => {
   if (!/^\d{4}$/.test(last_4)) {
     return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'last_4 must be exactly 4 digits.' } });
   }
-  const cardId = addPaymentCard(req.params.userId, { card_type, last_4, expiry_mm_yy });
-  insertAuditEvent(null, req.params.userId, 'ACCESS', 'user', req.params.userId, { resource: 'payment', action: 'ADD_CARD' });
-  const cards = getPaymentCards(req.params.userId);
+  const cardId = await addPaymentCard(req.params.userId, { card_type, last_4, expiry_mm_yy });
+  await insertAuditEvent(null, req.params.userId, 'ACCESS', 'user', req.params.userId, { resource: 'payment', action: 'ADD_CARD' });
+  const cards = await getPaymentCards(req.params.userId);
   const card  = cards.find(c => c.id === cardId);
   (req.log ?? log).info({ userId: req.params.userId, cardId, cardType: card_type }, 'Added payment card');
   res.status(201).json({ card });
-});
+}));
 
-router.delete('/payment/:userId/cards/:cardId', (req, res) => {
+router.delete('/payment/:userId/cards/:cardId', wrap(async (req, res) => {
   if (req.params.userId !== req.user.sub) return forbidden(req, res);
-  const removed = removePaymentCard(req.params.userId, req.params.cardId);
+  const removed = await removePaymentCard(req.params.userId, req.params.cardId);
   if (!removed) {
     (req.log ?? log).debug({ userId: req.params.userId, cardId: req.params.cardId }, 'Remove card — not found');
     return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Card not found.' } });
   }
-  insertAuditEvent(null, req.params.userId, 'ACCESS', 'user', req.params.userId, { resource: 'payment', action: 'REMOVE_CARD' });
+  await insertAuditEvent(null, req.params.userId, 'ACCESS', 'user', req.params.userId, { resource: 'payment', action: 'REMOVE_CARD' });
   (req.log ?? log).info({ userId: req.params.userId, cardId: req.params.cardId }, 'Removed payment card');
   res.json({ success: true });
-});
+}));
 
 // ─── CONTACTS ────────────────────────────────────────────────────────────────
 
-router.get('/contacts/:userId', (req, res) => {
+router.get('/contacts/:userId', wrap(async (req, res) => {
   if (req.params.userId !== req.user.sub) return forbidden(req, res);
-  const data = getContacts(req.params.userId);
+  const data = await getContacts(req.params.userId);
   (req.log ?? log).debug({ userId: req.params.userId }, 'Read contacts');
   res.json({ contacts: data || {} });
-});
+}));
 
-router.put('/contacts/:userId', (req, res) => {
+router.put('/contacts/:userId', wrap(async (req, res) => {
   if (req.params.userId !== req.user.sub) return forbidden(req, res);
-  upsertContacts(req.params.userId, req.body);
-  insertAuditEvent(null, req.params.userId, 'ACCESS', 'user', req.params.userId, { resource: 'contacts', action: 'UPDATE' });
-  const updated = getContacts(req.params.userId);
+  await upsertContacts(req.params.userId, req.body);
+  await insertAuditEvent(null, req.params.userId, 'ACCESS', 'user', req.params.userId, { resource: 'contacts', action: 'UPDATE' });
+  const updated = await getContacts(req.params.userId);
   (req.log ?? log).info({ userId: req.params.userId }, 'Updated contacts');
   res.json({ contacts: updated });
-});
+}));
 
 module.exports = router;

@@ -9,8 +9,11 @@ const logger   = require('../lib/logger');
 const log    = logger.child({ module: 'route:auth' });
 const router = express.Router();
 
+// Propagates async errors to Express's global error handler
+const wrap = fn => (req, res, next) => fn(req, res, next).catch(next);
+
 // POST /auth/register
-router.post('/register', async (req, res) => {
+router.post('/register', wrap(async (req, res) => {
   const { email, password, name } = req.body;
 
   if (!email || !password || !name) {
@@ -20,14 +23,14 @@ router.post('/register', async (req, res) => {
     return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'Password must be at least 8 characters.' } });
   }
 
-  const existing = findUserByEmail(email.toLowerCase());
+  const existing = await findUserByEmail(email.toLowerCase());
   if (existing) {
     (req.log ?? log).warn({ email: email.toLowerCase() }, 'Registration failed — email already taken');
     return res.status(409).json({ error: { code: 'EMAIL_TAKEN', message: 'An account with this email already exists.' } });
   }
 
   const passwordHash = await bcrypt.hash(password, 12);
-  const userId       = createUser(email.toLowerCase(), passwordHash, name);
+  const userId       = await createUser(email.toLowerCase(), passwordHash, name);
 
   (req.log ?? log).info({ userId, email: email.toLowerCase() }, 'User registered');
 
@@ -39,17 +42,17 @@ router.post('/register', async (req, res) => {
     refreshToken,
     user: { id: userId, email: email.toLowerCase(), name },
   });
-});
+}));
 
 // POST /auth/login
-router.post('/login', async (req, res) => {
+router.post('/login', wrap(async (req, res) => {
   const { email, password } = req.body;
 
   if (!email || !password) {
     return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'email and password are required.' } });
   }
 
-  const user = findUserByEmail(email.toLowerCase());
+  const user = await findUserByEmail(email.toLowerCase());
   if (!user) {
     (req.log ?? log).warn({ email: email.toLowerCase() }, 'Login failed — user not found');
     return res.status(401).json({ error: { code: 'INVALID_CREDENTIALS', message: 'Invalid email or password.' } });
@@ -71,40 +74,42 @@ router.post('/login', async (req, res) => {
     refreshToken,
     user: { id: user.id, email: user.email, name: user.name },
   });
-});
+}));
 
 // POST /auth/refresh
-router.post('/refresh', (req, res) => {
+router.post('/refresh', wrap(async (req, res) => {
   const { refreshToken } = req.body;
   if (!refreshToken) {
     return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'refreshToken is required.' } });
   }
+  let payload;
   try {
-    const payload  = verifyRefreshToken(refreshToken);
-    const user     = findUserById(payload.sub);
-    if (!user) {
-      (req.log ?? log).warn({ sub: payload.sub }, 'Token refresh failed — user not found');
-      return res.status(401).json({ error: { code: 'TOKEN_INVALID', message: 'User not found.' } });
-    }
-
-    (req.log ?? log).debug({ userId: user.id }, 'Access token refreshed');
-    const newAccessToken = issueToken(user.id, user.email);
-    res.json({ accessToken: newAccessToken });
+    payload = verifyRefreshToken(refreshToken);
   } catch (err) {
     (req.log ?? log).warn({ reason: err.message }, 'Token refresh failed — invalid token');
-    res.status(401).json({ error: { code: 'TOKEN_INVALID', message: 'Refresh token is invalid or expired.' } });
+    return res.status(401).json({ error: { code: 'TOKEN_INVALID', message: 'Refresh token is invalid or expired.' } });
   }
-});
+
+  const user = await findUserById(payload.sub);
+  if (!user) {
+    (req.log ?? log).warn({ sub: payload.sub }, 'Token refresh failed — user not found');
+    return res.status(401).json({ error: { code: 'TOKEN_INVALID', message: 'User not found.' } });
+  }
+
+  (req.log ?? log).debug({ userId: user.id }, 'Access token refreshed');
+  const newAccessToken = issueToken(user.id, user.email);
+  res.json({ accessToken: newAccessToken });
+}));
 
 // GET /auth/me
-router.get('/me', verifyToken, (req, res) => {
-  const user = findUserById(req.user.sub);
+router.get('/me', verifyToken, wrap(async (req, res) => {
+  const user = await findUserById(req.user.sub);
   if (!user) {
     (req.log ?? log).warn({ userId: req.user.sub }, '/me — user not found in DB');
     return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'User not found.' } });
   }
   (req.log ?? log).debug({ userId: user.id }, 'Auth /me');
   res.json({ user });
-});
+}));
 
 module.exports = router;

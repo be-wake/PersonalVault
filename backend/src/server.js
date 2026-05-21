@@ -7,6 +7,7 @@ const { v4: uuidv4 } = require('uuid');
 const logger        = require('./lib/logger');
 const requestLogger = require('./middleware/requestLogger');
 const { attachWebSocket } = require('./ws');
+const db            = require('./db');
 
 const log = logger.child({ module: 'server' });
 
@@ -76,16 +77,31 @@ attachWebSocket(server);
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 4000;
-server.listen(PORT, () => {
-  log.info({ port: PORT, logLevel: logger.level, nodeEnv: process.env.NODE_ENV ?? 'development' },
-    'PDV backend started');
-});
+
+async function start() {
+  try {
+    log.info('Initialising database…');
+    await db.init();
+    log.info('Database ready');
+  } catch (err) {
+    log.fatal({ err }, 'Failed to initialise database — exiting');
+    process.exit(1);
+  }
+
+  server.listen(PORT, () => {
+    log.info({ port: PORT, logLevel: logger.level, nodeEnv: process.env.NODE_ENV ?? 'development' },
+      'PDV backend started');
+  });
+}
+
+start();
 
 // Graceful shutdown
 function shutdown(signal) {
   log.info({ signal }, 'Shutting down…');
-  server.close(() => {
+  server.close(async () => {
     log.info('HTTP server closed');
+    try { await db.close(); log.info('DB pool closed'); } catch {}
     process.exit(0);
   });
 }
