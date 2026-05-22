@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthState } from '@/lib/auth';
+import { useRealtime, type RealtimeMessage } from '@/lib/ws';
 import { api, ConsentGrant } from '@/lib/api';
 import ConsentCard from '@/components/ConsentCard';
 
@@ -47,7 +48,7 @@ export default function DashboardPage() {
   const [grants, setGrants] = useState<ConsentGrant[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const reload = useCallback(() => {
     if (!user) return;
     api.consents
       .list(user.id)
@@ -55,6 +56,14 @@ export default function DashboardPage() {
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [user]);
+
+  useEffect(() => { reload(); }, [reload]);
+
+  // Live updates (F22/C6): keep the active-consent tiles fresh.
+  const onRealtime = useCallback((msg: RealtimeMessage) => {
+    if (msg?.type?.startsWith('CONSENT_') || msg?.event?.startsWith('consent.')) reload();
+  }, [reload]);
+  useRealtime(onRealtime);
 
   const firstName = user?.name?.split(' ')[0] ?? 'there';
   const activeCount = grants.length;

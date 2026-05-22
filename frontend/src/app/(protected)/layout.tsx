@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthState } from '@/lib/auth';
+import { WebSocketProvider } from '@/lib/ws';
 import BottomNav from '@/components/BottomNav';
 
 // AuthProvider is mounted at the root layout — this guard just reads from it.
@@ -34,8 +35,10 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 
   if (!user) return null;
 
+  // One WebSocket for the whole authenticated app (F22/C6) — every screen can
+  // now react to CONSENT_GRANTED / CONSENT_REVOKED / CONSENT_EXPIRED.
   return (
-    <>
+    <WebSocketProvider>
       <main
         style={{
           minHeight: '100dvh',
@@ -46,7 +49,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
         {children}
       </main>
       <BottomNav />
-    </>
+    </WebSocketProvider>
   );
 }
 

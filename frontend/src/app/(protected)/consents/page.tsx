@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthState } from '@/lib/auth';
+import { useRealtime, type RealtimeMessage } from '@/lib/ws';
 import { api, ConsentGrant } from '@/lib/api';
 import ConsentCard from '@/components/ConsentCard';
 
@@ -15,14 +16,21 @@ export default function ConsentsPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<Filter>('ALL');
 
-  useEffect(() => {
+  const reload = useCallback(() => {
     if (!user) return;
-    api.consents
-      .list(user.id)
-      .then(setGrants)
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    api.consents.list(user.id).then(setGrants).catch(() => {}).finally(() => setLoading(false));
   }, [user]);
+
+  useEffect(() => { reload(); }, [reload]);
+
+  // Live updates (F22/C6): a grant/revoke/expiry anywhere refreshes the list.
+  const onRealtime = useCallback((msg: RealtimeMessage) => {
+    if (msg?.type === 'CONNECTED') return;
+    if (msg?.type?.startsWith('CONSENT_') || msg?.event?.startsWith('consent.')) {
+      reload();
+    }
+  }, [reload]);
+  useRealtime(onRealtime);
 
   const filtered = filter === 'ALL' ? grants : grants.filter((g) => g.status === filter);
 

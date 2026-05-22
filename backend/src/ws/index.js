@@ -17,8 +17,15 @@ function broadcastToUser(userId, payload) {
   let sent = 0;
   for (const ws of connections) {
     if (ws.readyState === ws.OPEN) {
-      ws.send(message);
-      sent++;
+      // E17 — guard each send so one dead socket can't break the broadcast,
+      // and prune it from the set.
+      try {
+        ws.send(message);
+        sent++;
+      } catch (err) {
+        log.warn({ userId, err }, 'WS send failed — pruning dead socket');
+        connections.delete(ws);
+      }
     }
   }
   if (sent > 0) {
@@ -29,7 +36,26 @@ function broadcastToUser(userId, payload) {
 function attachWebSocket(server) {
   const wss = new WebSocketServer({ server, path: '/v1/ws' });
 
+  // E16 — heartbeat. Azure Container Apps closes idle connections at ~4 min.
+  // Ping every WS_HEARTBEAT_MS; terminate any client that didn't pong since the
+  // last tick (browsers auto-pong, so a missed pong means the socket is dead).
+  const HEARTBEAT_MS = Number(process.env.WS_HEARTBEAT_MS) || 60_000;
+  const heartbeat = setInterval(() => {
+    for (const ws of wss.clients) {
+      if (ws.isAlive === false) { ws.terminate(); continue; }
+      ws.isAlive = false;
+      try { ws.ping(); } catch { /* socket already gone */ }
+    }
+  }, HEARTBEAT_MS);
+  heartbeat.unref?.();
+  wss.on('close', () => clearInterval(heartbeat));
+
   wss.on('connection', (ws, req) => {
+    ws.isAlive = true;
+    ws.on('pong',    () => { ws.isAlive = true; });
+    // Any inbound app-level frame (e.g. the client's keepalive PING) also counts
+    // as liveness. We don't otherwise act on client messages.
+    ws.on('message', () => { ws.isAlive = true; });
     const url   = new URL(req.url, 'ws://localhost');
     const token = url.searchParams.get('token');
 

@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useAuthState } from '@/lib/auth';
+import { useRealtime, type RealtimeMessage } from '@/lib/ws';
 import { api, ConsentGrant, SCOPE_LABELS } from '@/lib/api';
 import RPHeader from '@/components/RPHeader';
 import StatusBadge from '@/components/StatusBadge';
@@ -21,7 +22,6 @@ export default function ConsentDetailPage() {
   const [revoking, setRevoking] = useState(false);
   const [pinError, setPinError] = useState('');
   const [toast, setToast] = useState('');
-  const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -30,40 +30,21 @@ export default function ConsentDetailPage() {
       .then(setGrant)
       .catch(() => router.replace('/consents'))
       .finally(() => setLoading(false));
-
-    // WebSocket for real-time revocation updates.
-    // Derive ws(s):// from the same base the REST API uses so dev
-    // (http://localhost:4000) and prod (https://… → wss://…) both work.
-    const token = localStorage.getItem('pdv_token');
-    if (token) {
-      const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-      const wsBase  = apiBase.replace(/^http/, 'ws');
-      const ws = new WebSocket(`${wsBase}/v1/ws?token=${encodeURIComponent(token)}`);
-      wsRef.current = ws;
-      ws.onmessage = (evt) => {
-        try {
-          const msg = JSON.parse(evt.data);
-          // Backend currently broadcasts { type: 'CONSENT_REVOKED', grant }.
-          // Accept the legacy { event: 'consent.revoked', grantId } shape too
-          // so older backends keep working during a rolling deploy.
-          const isRevoke =
-            msg?.type === 'CONSENT_REVOKED' ||
-            msg?.event === 'consent.revoked';
-          const affectedId = msg?.grant?.id ?? msg?.grantId;
-          if (isRevoke && affectedId === grantId) {
-            setGrant((g) =>
-              g
-                ? { ...g, status: 'REVOKED', revoked_at: msg?.grant?.revoked_at ?? new Date().toISOString() }
-                : g,
-            );
-          }
-        } catch {
-          /* ignore malformed messages */
-        }
-      };
-    }
-    return () => wsRef.current?.close();
   }, [user, grantId, router]);
+
+  // Real-time updates via the shared app WebSocket (F22/C6). Reflect revocation
+  // and expiry for this specific grant. Accept the legacy { event } shape too so
+  // a rolling deploy stays compatible.
+  const onRealtime = useCallback((msg: RealtimeMessage) => {
+    const affectedId = msg?.grant?.id ?? msg?.grantId;
+    if (affectedId !== grantId) return;
+    if (msg?.type === 'CONSENT_REVOKED' || msg?.event === 'consent.revoked') {
+      setGrant((g) => g ? { ...g, status: 'REVOKED', revoked_at: (msg?.grant as any)?.revoked_at ?? new Date().toISOString() } : g);
+    } else if (msg?.type === 'CONSENT_EXPIRED' || msg?.event === 'consent.expired') {
+      setGrant((g) => g ? { ...g, status: 'EXPIRED' } : g);
+    }
+  }, [grantId]);
+  useRealtime(onRealtime);
 
   async function handleRevoke() {
     // SECURITY-PLACEHOLDER: see /consents/grant page — same caveat applies.
