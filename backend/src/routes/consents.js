@@ -6,6 +6,7 @@ const {
   getRelyingPartyById, insertAuditEvent,
 } = require('../db');
 const { verifyToken } = require('../middleware/auth');
+const { requireStepUp } = require('../middleware/stepUp');
 const { broadcastToUser } = require('../ws');
 const logger   = require('../lib/logger');
 
@@ -43,12 +44,14 @@ router.get('/:userId/:grantId', wrap(async (req, res) => {
 }));
 
 // POST /v1/consents — create a new consent grant
-router.post('/', wrap(async (req, res) => {
+// Sensitive → step-up gated (S2). Idempotency-Key header dedupes double-taps (E7).
+router.post('/', requireStepUp('consent:grant'), wrap(async (req, res) => {
   const { relyingPartyId, scopes, purpose, expiresAt } = req.body;
-  const userId = req.user.sub;
+  const userId         = req.user.sub;
+  const idempotencyKey = req.headers['idempotency-key'] || null;
 
-  if (!relyingPartyId || !scopes || !purpose) {
-    return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'relyingPartyId, scopes, and purpose are required.' } });
+  if (!relyingPartyId || !Array.isArray(scopes) || scopes.length === 0 || !purpose) {
+    return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'relyingPartyId, a non-empty scopes array, and purpose are required.' } });
   }
 
   const rp = await getRelyingPartyById(relyingPartyId);
@@ -67,18 +70,25 @@ router.post('/', wrap(async (req, res) => {
     }
   }
 
-  const grantId = await createGrant(userId, relyingPartyId, scopes, purpose, expiresAt || null);
-  await insertAuditEvent(grantId, userId, 'GRANT_CREATED', 'user', userId, { relyingPartyId, scopes, purpose });
+  const { id: grantId, created } = await createGrant(userId, relyingPartyId, scopes, purpose, expiresAt || null, idempotencyKey);
+
+  // Only emit the audit event + broadcast on a genuinely new grant — a replayed
+  // Idempotency-Key returns the original grant without side effects.
+  if (created) {
+    await insertAuditEvent(grantId, userId, 'GRANT_CREATED', 'user', userId, { relyingPartyId, scopes, purpose });
+    const grant = await getGrantById(grantId);
+    broadcastToUser(userId, { type: 'CONSENT_GRANTED', grant });
+    (req.log ?? log).info({ grantId, userId, relyingPartyId, rpName: rp.name, scopes }, 'Consent grant created');
+    return res.status(201).json({ grant });
+  }
+
   const grant = await getGrantById(grantId);
-  broadcastToUser(userId, { type: 'CONSENT_GRANTED', grant });
-
-  (req.log ?? log).info({ grantId, userId, relyingPartyId, rpName: rp.name, scopes }, 'Consent grant created');
-
-  res.status(201).json({ grant });
+  (req.log ?? log).info({ grantId, userId, idempotent: true }, 'Consent grant returned via idempotency key');
+  res.status(200).json({ grant });
 }));
 
-// DELETE /v1/consents/:grantId — revoke a grant
-router.delete('/:grantId', wrap(async (req, res) => {
+// DELETE /v1/consents/:grantId — revoke a grant (sensitive → step-up gated, S2)
+router.delete('/:grantId', requireStepUp('consent:revoke'), wrap(async (req, res) => {
   const userId    = req.user.sub;
   const { grantId } = req.params;
 

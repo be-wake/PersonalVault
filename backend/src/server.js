@@ -92,6 +92,7 @@ async function start() {
   // process.env secrets rather than undefined.
   app.use('/auth',               authLimiter, require('./routes/auth'));
   app.use('/v1/consents',        apiLimiter,  require('./routes/consents'));
+  app.use('/v1/account',         apiLimiter,  require('./routes/account'));
   app.use('/v1',                 apiLimiter,  require('./routes/vault'));
   app.use('/v1/audit',           apiLimiter,  require('./routes/audit'));
   app.use('/v1/relying-parties', apiLimiter,  require('./routes/relyingParties'));
@@ -101,10 +102,22 @@ async function start() {
     require('./routes/logs'),
   );
 
-  // Health check — no auth, not logged (suppressed in requestLogger).
+  // Liveness — process is up. No DB dependency, never fails while serving.
   app.get('/health', (_req, res) =>
     res.json({ status: 'ok', timestamp: new Date().toISOString() }),
   );
+
+  // Readiness (O12) — pings the DB; returns 503 if the database is unreachable
+  // so the orchestrator can keep traffic off a replica that can't serve.
+  app.get('/ready', async (_req, res) => {
+    try {
+      await _db.ping();
+      res.json({ status: 'ready', timestamp: new Date().toISOString() });
+    } catch (err) {
+      log.error({ err }, 'Readiness check failed — DB unreachable');
+      res.status(503).json({ status: 'not_ready', error: 'database_unreachable' });
+    }
+  });
 
   // Global error handler — must be registered after all routes.
   // eslint-disable-next-line no-unused-vars
@@ -173,5 +186,27 @@ async function shutdown(signal) {
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT',  () => shutdown('SIGINT'));
 
-process.on('uncaughtException',  (err) => { log.fatal({ err }, 'Uncaught exception');  shutdown('uncaughtException').catch(() => process.exit(1)); });
-process.on('unhandledRejection', (err) => { log.fatal({ err }, 'Unhandled rejection'); shutdown('unhandledRejection').catch(() => process.exit(1)); });
+// S14 — circuit breaker for unhandled async errors.
+// A single transient rejection (e.g. a dropped DB socket) shouldn't kill the
+// process. We log every one, but only shut down if they exceed a threshold
+// inside a rolling window — a sign of a genuinely unhealthy process.
+const REJECTION_THRESHOLD  = Number(process.env.REJECTION_THRESHOLD)  || 10;
+const REJECTION_WINDOW_MS  = Number(process.env.REJECTION_WINDOW_MS)  || 60_000;
+let rejectionTimestamps = [];
+
+function recordFatalish(kind, err) {
+  log.error({ err, kind }, 'Unhandled async error');
+  const now = Date.now();
+  rejectionTimestamps = rejectionTimestamps.filter(t => now - t < REJECTION_WINDOW_MS);
+  rejectionTimestamps.push(now);
+  if (rejectionTimestamps.length >= REJECTION_THRESHOLD) {
+    log.fatal({ count: rejectionTimestamps.length, windowMs: REJECTION_WINDOW_MS },
+      'Unhandled-error threshold exceeded — shutting down');
+    shutdown(kind).catch(() => process.exit(1));
+  }
+}
+
+// An uncaught *exception* leaves the process in an undefined state — always fatal.
+process.on('uncaughtException',  (err) => { log.fatal({ err }, 'Uncaught exception'); shutdown('uncaughtException').catch(() => process.exit(1)); });
+// Unhandled *rejections* are gated by the circuit breaker above.
+process.on('unhandledRejection', (err) => recordFatalish('unhandledRejection', err));

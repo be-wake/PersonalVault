@@ -2,8 +2,11 @@
 
 const express  = require('express');
 const bcrypt   = require('bcryptjs');
+const { z }    = require('zod');
 const { createUser, findUserByEmail, findUserById } = require('../db');
 const { issueToken, issueRefreshToken, verifyRefreshToken, verifyToken } = require('../middleware/auth');
+const { issueStepUpToken } = require('../middleware/stepUp');
+const { validate } = require('../middleware/validate');
 const logger   = require('../lib/logger');
 
 const log    = logger.child({ module: 'route:auth' });
@@ -12,27 +15,46 @@ const router = express.Router();
 // Propagates async errors to Express's global error handler
 const wrap = fn => (req, res, next) => fn(req, res, next).catch(next);
 
+// ── Validation schemas (C1) ─────────────────────────────────────────────────
+// S8 — password policy: ≥ 10 chars with at least one letter and one digit.
+// (Account lockout / throttling is handled by authLimiter in server.js;
+//  breached-password check via HIBP is a future enhancement.)
+const passwordPolicy = z.string()
+  .min(10, 'Password must be at least 10 characters.')
+  .max(200, 'Password is too long.')
+  .refine(v => /[A-Za-z]/.test(v) && /[0-9]/.test(v),
+    'Password must contain at least one letter and one number.');
+
+const registerSchema = z.object({
+  email:    z.string().email('A valid email is required.').transform(s => s.toLowerCase()),
+  password: passwordPolicy,
+  name:     z.string().min(1, 'Name is required.').max(120),
+});
+
+const loginSchema = z.object({
+  email:    z.string().email('A valid email is required.').transform(s => s.toLowerCase()),
+  password: z.string().min(1, 'Password is required.'),
+});
+
+const stepUpSchema = z.object({
+  password: z.string().min(1, 'Password is required.'),
+  intent:   z.enum(['consent:grant', 'consent:revoke', 'payment:add_card', 'account:delete']),
+});
+
 // POST /auth/register
-router.post('/register', wrap(async (req, res) => {
-  const { email, password, name } = req.body;
+router.post('/register', validate({ body: registerSchema }), wrap(async (req, res) => {
+  const { email, password, name } = req.body; // already validated + email lower-cased
 
-  if (!email || !password || !name) {
-    return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'email, password and name are required.' } });
-  }
-  if (password.length < 8) {
-    return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'Password must be at least 8 characters.' } });
-  }
-
-  const existing = await findUserByEmail(email.toLowerCase());
+  const existing = await findUserByEmail(email);
   if (existing) {
-    (req.log ?? log).warn({ email: email.toLowerCase() }, 'Registration failed — email already taken');
+    (req.log ?? log).warn({ email }, 'Registration failed — email already taken');
     return res.status(409).json({ error: { code: 'EMAIL_TAKEN', message: 'An account with this email already exists.' } });
   }
 
   const passwordHash = await bcrypt.hash(password, 12);
-  const userId       = await createUser(email.toLowerCase(), passwordHash, name);
+  const userId       = await createUser(email, passwordHash, name);
 
-  (req.log ?? log).info({ userId, email: email.toLowerCase() }, 'User registered');
+  (req.log ?? log).info({ userId, email }, 'User registered');
 
   const accessToken  = issueToken(userId, email.toLowerCase());
   const refreshToken = issueRefreshToken(userId);
@@ -40,21 +62,17 @@ router.post('/register', wrap(async (req, res) => {
   res.status(201).json({
     accessToken,
     refreshToken,
-    user: { id: userId, email: email.toLowerCase(), name },
+    user: { id: userId, email, name },
   });
 }));
 
 // POST /auth/login
-router.post('/login', wrap(async (req, res) => {
-  const { email, password } = req.body;
+router.post('/login', validate({ body: loginSchema }), wrap(async (req, res) => {
+  const { email, password } = req.body; // validated + email lower-cased
 
-  if (!email || !password) {
-    return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'email and password are required.' } });
-  }
-
-  const user = await findUserByEmail(email.toLowerCase());
+  const user = await findUserByEmail(email);
   if (!user) {
-    (req.log ?? log).warn({ email: email.toLowerCase() }, 'Login failed — user not found');
+    (req.log ?? log).warn({ email }, 'Login failed — user not found');
     return res.status(401).json({ error: { code: 'INVALID_CREDENTIALS', message: 'Invalid email or password.' } });
   }
 
@@ -110,6 +128,31 @@ router.get('/me', verifyToken, wrap(async (req, res) => {
   }
   (req.log ?? log).debug({ userId: user.id }, 'Auth /me');
   res.json({ user });
+}));
+
+// POST /auth/stepup — issue a short-lived step-up token after re-authentication.
+// The client calls this immediately before a sensitive action (consent grant/
+// revoke, add card, delete account) and presents the returned token in the
+// X-PDV-Stepup header. Second factor here is password re-entry; biometric/TOTP
+// factors (F18/F19) can issue the same token type with a different `factor`.
+router.post('/stepup', verifyToken, validate({ body: stepUpSchema }), wrap(async (req, res) => {
+  const { password, intent } = req.body;
+
+  // Need the password hash → look up by the email embedded in the access token.
+  const user = await findUserByEmail(req.user.email);
+  if (!user) {
+    return res.status(401).json({ error: { code: 'INVALID_CREDENTIALS', message: 'Re-authentication failed.' } });
+  }
+
+  const match = await bcrypt.compare(password, user.password_hash);
+  if (!match) {
+    (req.log ?? log).warn({ userId: user.id, intent }, 'Step-up failed — wrong password');
+    return res.status(401).json({ error: { code: 'INVALID_CREDENTIALS', message: 'Re-authentication failed.' } });
+  }
+
+  const stepUpToken = issueStepUpToken(user.id, intent, 'password');
+  (req.log ?? log).info({ userId: user.id, intent }, 'Step-up token issued');
+  res.json({ stepUpToken, intent, factor: 'password' });
 }));
 
 module.exports = router;

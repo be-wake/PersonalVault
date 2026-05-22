@@ -2,6 +2,8 @@
 
 const { Pool } = require('pg');
 const { v4: uuidv4 } = require('uuid');
+const crypto = require('crypto');
+const { sha256 } = require('../lib/crypto');
 
 // ── Connection pool ───────────────────────────────────────────────────────────
 // DATABASE_URL is set in the environment:
@@ -120,6 +122,35 @@ async function initSchema() {
   ];
 
   for (const statement of ddl) {
+    await pool.query(statement);
+  }
+
+  // ── Idempotent migrations for columns added after the initial release ──────
+  // ADD COLUMN IF NOT EXISTS lets these run safely on both fresh and existing
+  // databases (the Azure instance was created before these columns existed).
+  const migrations = [
+    // E7 — Idempotency-Key support on consent creation
+    `ALTER TABLE consent_grants ADD COLUMN IF NOT EXISTS idempotency_key TEXT`,
+    // F14 — tamper-evident hash-chained audit log
+    `ALTER TABLE audit_events   ADD COLUMN IF NOT EXISTS prev_hash TEXT`,
+    `ALTER TABLE audit_events   ADD COLUMN IF NOT EXISTS hash      TEXT`,
+  ];
+  for (const statement of migrations) {
+    await pool.query(statement);
+  }
+
+  // ── Indexes ───────────────────────────────────────────────────────────────
+  const indexes = [
+    // E4 — audit list is always "this user, newest first"
+    `CREATE INDEX IF NOT EXISTS idx_audit_user_ts ON audit_events (user_id, ts DESC)`,
+    // E5 — consents listed per user
+    `CREATE INDEX IF NOT EXISTS idx_grants_user   ON consent_grants (user_id)`,
+    // E6 — at most one current address per user
+    `CREATE UNIQUE INDEX IF NOT EXISTS uq_address_current ON addresses (user_id) WHERE is_current = true`,
+    // E7 — one grant per (user, idempotency key)
+    `CREATE UNIQUE INDEX IF NOT EXISTS uq_consent_idem ON consent_grants (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL`,
+  ];
+  for (const statement of indexes) {
     await pool.query(statement);
   }
 }
@@ -285,7 +316,10 @@ async function getPaymentCards(userId) {
 
 async function addPaymentCard(userId, cardData) {
   const id    = uuidv4();
-  const token = 'tok_' + Math.random().toString(36).substring(2, 18);
+  // S12 — STUB network token. NOT a real Visa VTS / Mastercard MDES token.
+  // Uses a CSPRNG so it's unguessable; prefixed STUB_ so it's never mistaken
+  // for a production token. Replace with a real PSP tokenisation call (F15).
+  const token = 'STUB_tok_' + crypto.randomBytes(16).toString('hex');
   await pool.query(
     'INSERT INTO payment_cards (id, user_id, card_token, card_type, last_4, expiry_mm_yy) VALUES ($1, $2, $3, $4, $5, $6)',
     [id, userId, token, cardData.card_type, cardData.last_4, cardData.expiry_mm_yy]
@@ -330,14 +364,41 @@ async function upsertContacts(userId, data) {
 
 // ── Consent helpers ───────────────────────────────────────────────────────────
 
-async function createGrant(userId, relyingPartyId, scopes, purpose, expiresAt) {
+/**
+ * Create a consent grant.
+ *
+ * When an idempotencyKey is supplied (E7), a double-tap that replays the same
+ * key returns the original grant instead of creating a duplicate.
+ *
+ * @returns {Promise<{ id: string, created: boolean }>}
+ */
+async function createGrant(userId, relyingPartyId, scopes, purpose, expiresAt, idempotencyKey = null) {
   const id = uuidv4();
+
+  if (idempotencyKey) {
+    const { rows } = await pool.query(
+      `INSERT INTO consent_grants (id, user_id, relying_party_id, scopes_json, purpose, expires_at, idempotency_key)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       ON CONFLICT (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
+       RETURNING id`,
+      [id, userId, relyingPartyId, JSON.stringify(scopes), purpose, expiresAt || null, idempotencyKey]
+    );
+    if (rows[0]) return { id: rows[0].id, created: true };
+
+    // Conflict — a grant with this key already exists; return it.
+    const existing = await pool.query(
+      `SELECT id FROM consent_grants WHERE user_id = $1 AND idempotency_key = $2`,
+      [userId, idempotencyKey]
+    );
+    return { id: existing.rows[0].id, created: false };
+  }
+
   await pool.query(
     `INSERT INTO consent_grants (id, user_id, relying_party_id, scopes_json, purpose, expires_at)
      VALUES ($1, $2, $3, $4, $5, $6)`,
     [id, userId, relyingPartyId, JSON.stringify(scopes), purpose, expiresAt || null]
   );
-  return id;
+  return { id, created: true };
 }
 
 async function getGrantsByUser(userId) {
@@ -393,15 +454,75 @@ function parseGrant(grant) {
 
 // ── Audit helpers ─────────────────────────────────────────────────────────────
 
+/**
+ * Insert an audit event into a per-user tamper-evident hash chain (F14).
+ *
+ * Each row stores hash = SHA-256(prev_hash + canonical(event)). The previous
+ * row is locked FOR UPDATE inside a transaction so concurrent writers can't
+ * fork the chain. verifyAuditChain() can later detect any insert/edit/delete.
+ */
 async function insertAuditEvent(grantId, userId, eventType, actorType, actorId, metadata) {
-  const id = uuidv4();
-  await pool.query(
-    `INSERT INTO audit_events (id, grant_id, user_id, event_type, actor_type, actor_id, metadata_json)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-    [id, grantId ?? null, userId, eventType, actorType, actorId,
-      metadata ? JSON.stringify(metadata) : null]
+  const id       = uuidv4();
+  const ts       = new Date().toISOString();
+  const metaJson = metadata ? JSON.stringify(metadata) : null;
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Lock the user's latest event so the chain is serialised.
+    const { rows } = await client.query(
+      `SELECT hash FROM audit_events WHERE user_id = $1 ORDER BY ts DESC, id DESC LIMIT 1 FOR UPDATE`,
+      [userId]
+    );
+    const prevHash  = rows[0]?.hash ?? 'GENESIS';
+    const canonical = JSON.stringify({ id, grantId: grantId ?? null, userId, eventType, actorType, actorId, ts, metadata: metaJson, prevHash });
+    const hash      = sha256(canonical);
+
+    await client.query(
+      `INSERT INTO audit_events (id, grant_id, user_id, event_type, actor_type, actor_id, ts, metadata_json, prev_hash, hash)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+      [id, grantId ?? null, userId, eventType, actorType, actorId, ts, metaJson, prevHash, hash]
+    );
+
+    await client.query('COMMIT');
+    return id;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Recompute the hash chain for a user and report the first break, if any.
+ * Backs an integrity-check endpoint / scheduled job.
+ *
+ * @returns {Promise<{ ok: boolean, count: number, brokenAt?: string }>}
+ */
+async function verifyAuditChain(userId) {
+  const { rows } = await pool.query(
+    `SELECT id, grant_id, user_id, event_type, actor_type, actor_id, ts, metadata_json, prev_hash, hash
+     FROM audit_events WHERE user_id = $1 ORDER BY ts ASC, id ASC`,
+    [userId]
   );
-  return id;
+
+  let prevHash = 'GENESIS';
+  for (const r of rows) {
+    const ts = r.ts instanceof Date ? r.ts.toISOString() : r.ts;
+    const canonical = JSON.stringify({
+      id: r.id, grantId: r.grant_id ?? null, userId: r.user_id,
+      eventType: r.event_type, actorType: r.actor_type, actorId: r.actor_id,
+      ts, metadata: r.metadata_json ?? null, prevHash,
+    });
+    const expected = sha256(canonical);
+    if (r.prev_hash !== prevHash || r.hash !== expected) {
+      return { ok: false, count: rows.length, brokenAt: r.id };
+    }
+    prevHash = r.hash;
+  }
+  return { ok: true, count: rows.length };
 }
 
 /**
@@ -485,6 +606,91 @@ function parseRP(rp) {
   };
 }
 
+// ── GDPR / DPDPA data-subject rights ──────────────────────────────────────────
+
+/**
+ * F9 — Right to erasure (GDPR Art. 17 / DPDPA S.12).
+ * Deletes the user and everything that cascades from them, plus the audit
+ * trail (which has no FK cascade because user_id is not a foreign key).
+ */
+async function deleteAccount(userId) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('DELETE FROM audit_events  WHERE user_id = $1', [userId]);
+    // users → identity_data / addresses / payment_cards / contacts / consent_grants
+    // are removed by ON DELETE CASCADE.
+    const { rowCount } = await client.query('DELETE FROM users WHERE id = $1', [userId]);
+    await client.query('COMMIT');
+    return rowCount > 0;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * F9 — Per-resource erasure. Clears one vault resource without deleting the
+ * account. Identity/contacts are blanked (the row must survive); address and
+ * cards are hard-deleted.
+ */
+async function deleteVaultResource(userId, resource) {
+  switch (resource) {
+    case 'identity':
+      await pool.query(
+        `UPDATE identity_data
+         SET first_name=NULL, last_name=NULL, date_of_birth=NULL, id_type=NULL, id_number=NULL, updated_at=NOW()
+         WHERE user_id=$1`, [userId]);
+      return true;
+    case 'address':
+      await pool.query('DELETE FROM addresses WHERE user_id=$1', [userId]);
+      return true;
+    case 'payment':
+      await pool.query('DELETE FROM payment_cards WHERE user_id=$1', [userId]);
+      return true;
+    case 'contacts':
+      await pool.query(
+        `UPDATE contacts SET phone_primary=NULL, email_secondary=NULL, updated_at=NOW() WHERE user_id=$1`,
+        [userId]);
+      return true;
+    default:
+      throw new Error(`Unknown vault resource: ${resource}`);
+  }
+}
+
+/**
+ * F10 — Data portability (GDPR Art. 20 / DPDPA S.11).
+ * Returns the full machine-readable snapshot of everything we hold on a user.
+ */
+async function exportUserData(userId) {
+  const [user, identity, address, paymentCards, contacts, consents, auditTrail] = await Promise.all([
+    findUserById(userId),
+    getIdentity(userId),
+    getCurrentAddress(userId),
+    getPaymentCards(userId),
+    getContacts(userId),
+    getGrantsByUser(userId),
+    getAuditEvents(userId, { limit: 200 }),
+  ]);
+  return {
+    exportedAt: new Date().toISOString(),
+    user,
+    vault: { identity, address, paymentCards, contacts },
+    consents,
+    auditTrail,
+  };
+}
+
+// ── Health ────────────────────────────────────────────────────────────────────
+
+/** O12 — lightweight liveness probe for the DB, backs GET /ready. */
+async function ping() {
+  await pool.query('SELECT 1');
+  return true;
+}
+
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
 
 /**
@@ -508,12 +714,14 @@ module.exports = {
   pool,   // exposed in case any code needs a direct client
   init,
   close,
+  ping,
   createUser, findUserByEmail, findUserById,
   getIdentity, upsertIdentity,
   getCurrentAddress, upsertAddress,
   getPaymentCards, addPaymentCard, removePaymentCard,
   getContacts, upsertContacts,
   createGrant, getGrantsByUser, getGrantById, revokeGrant,
-  insertAuditEvent, getAuditEvents,
+  insertAuditEvent, getAuditEvents, verifyAuditChain,
   getAllRelyingParties, getRelyingPartyById,
+  deleteAccount, deleteVaultResource, exportUserData,
 };

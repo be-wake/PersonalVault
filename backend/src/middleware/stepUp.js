@@ -22,6 +22,12 @@ const IS_PROD = process.env.NODE_ENV === 'production';
 
 const TTL = process.env.STEPUP_TOKEN_TTL || '5m';
 
+// Step-up is wired into sensitive routes but only ENFORCED when this flag is on.
+// Lets the backend ship the capability ahead of clients learning to send the
+// X-PDV-Stepup header (S2 / F19). Flip to 'true' once web + mobile fetch a
+// step-up token before sensitive actions.
+const ENFORCED = process.env.STEPUP_ENFORCED === 'true';
+
 function loadSecret() {
   const value = process.env.STEPUP_SECRET;
   if (value && value.length >= 16 && !/change-me/i.test(value)) return value;
@@ -54,6 +60,10 @@ function issueStepUpToken(userId, intent, factor) {
 function requireStepUp(intent) {
   const wanted = intentHash(intent);
   return (req, res, next) => {
+    // Wired but disabled until STEPUP_ENFORCED=true so we don't break clients
+    // that don't yet send the header.
+    if (!ENFORCED) return next();
+
     const header = req.headers['x-pdv-stepup'];
     if (!header) {
       return res.status(401).json({
