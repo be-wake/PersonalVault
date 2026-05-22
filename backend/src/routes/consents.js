@@ -8,6 +8,8 @@ const {
 const { verifyToken } = require('../middleware/auth');
 const { requireStepUp } = require('../middleware/stepUp');
 const { broadcastToUser } = require('../ws');
+const redisClient = require('../lib/redisClient');
+const serviceBus  = require('../lib/serviceBus');
 const logger   = require('../lib/logger');
 
 const log    = logger.child({ module: 'route:consents' });
@@ -114,6 +116,15 @@ router.delete('/:grantId', requireStepUp('consent:revoke'), wrap(async (req, res
 
   await insertAuditEvent(grantId, userId, 'REVOKED', 'user', userId, {
     revokedBy: 'user', relyingPartyId: grant.relying_party_id,
+  });
+
+  // F4 — block RP reads within seconds, ahead of the JWT's natural expiry.
+  await redisClient.revokeGrant(grantId);
+
+  // F3/F4 — publish the event. The in-process listener (dev) or a Service Bus
+  // subscription worker (prod) delivers the signed webhook to the RP.
+  await serviceBus.publish('consent.revoked', {
+    grantId, userId, relyingPartyId: grant.relying_party_id, occurredAt: new Date().toISOString(),
   });
 
   const updated = await getGrantById(grantId);

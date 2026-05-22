@@ -134,6 +134,8 @@ async function initSchema() {
     // F14 — tamper-evident hash-chained audit log
     `ALTER TABLE audit_events   ADD COLUMN IF NOT EXISTS prev_hash TEXT`,
     `ALTER TABLE audit_events   ADD COLUMN IF NOT EXISTS hash      TEXT`,
+    // F20 — relying-party client-credentials secret (sha256 hash)
+    `ALTER TABLE relying_parties ADD COLUMN IF NOT EXISTS client_secret_hash TEXT`,
   ];
   for (const statement of migrations) {
     await pool.query(statement);
@@ -195,11 +197,18 @@ async function seedRelyingParties() {
   ];
 
   for (const p of parties) {
+    // F20 — deterministic dev client secret per RP so the demo RP read flow is
+    // testable. In production, secrets would be rotated and delivered out-of-band.
+    const clientSecret = `rp_secret_${p.id.replace(/^rp-/, '')}_dev`;
+    const secretHash   = sha256(clientSecret);
+
     await pool.query(
-      `INSERT INTO relying_parties (id, name, client_id, domain, allowed_scopes, pci_scope, description)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       ON CONFLICT (id) DO NOTHING`,
-      [p.id, p.name, p.client_id, p.domain, p.allowed_scopes, p.pci_scope, p.description]
+      `INSERT INTO relying_parties (id, name, client_id, domain, allowed_scopes, pci_scope, description, client_secret_hash)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       ON CONFLICT (id) DO UPDATE
+         SET client_secret_hash = EXCLUDED.client_secret_hash
+         WHERE relying_parties.client_secret_hash IS NULL`,
+      [p.id, p.name, p.client_id, p.domain, p.allowed_scopes, p.pci_scope, p.description, secretHash]
     );
   }
 }
@@ -362,6 +371,21 @@ async function upsertContacts(userId, data) {
   }
 }
 
+/**
+ * Hydrate every vault resource for a user into the shape scopeEngine expects
+ * ({ identity, address, payment[], contacts }). Used by the RP scoped-read path
+ * before masking (F1/F2).
+ */
+async function getVaultBundle(userId) {
+  const [identity, address, payment, contacts] = await Promise.all([
+    getIdentity(userId),
+    getCurrentAddress(userId),
+    getPaymentCards(userId),
+    getContacts(userId),
+  ]);
+  return { identity, address, payment, contacts };
+}
+
 // ── Consent helpers ───────────────────────────────────────────────────────────
 
 /**
@@ -436,6 +460,24 @@ async function revokeGrant(grantId, userId) {
     [grantId, userId]
   );
   return rowCount > 0;
+}
+
+/**
+ * F5 — Flip ACTIVE grants whose expiry has passed to EXPIRED, writing an
+ * `EXPIRED` audit event for each. Called periodically by the scheduler in
+ * server.js. Returns the rows that transitioned.
+ */
+async function expireGrants() {
+  const { rows } = await pool.query(
+    `UPDATE consent_grants
+     SET status = 'EXPIRED'
+     WHERE status = 'ACTIVE' AND expires_at IS NOT NULL AND expires_at < NOW()
+     RETURNING id, user_id, relying_party_id`
+  );
+  for (const r of rows) {
+    await insertAuditEvent(r.id, r.user_id, 'EXPIRED', 'system', 'scheduler', { relyingPartyId: r.relying_party_id });
+  }
+  return rows;
 }
 
 function parseGrant(grant) {
@@ -598,6 +640,16 @@ async function getRelyingPartyById(id) {
   return parseRP(rows[0]);
 }
 
+/**
+ * Look up an RP by its client_id for the client-credentials flow (F20).
+ * Includes client_secret_hash so the caller can verify the secret.
+ */
+async function findRelyingPartyByClientId(clientId) {
+  const { rows } = await pool.query('SELECT * FROM relying_parties WHERE client_id = $1', [clientId]);
+  if (!rows[0]) return null;
+  return { ...parseRP(rows[0]), client_secret_hash: rows[0].client_secret_hash };
+}
+
 function parseRP(rp) {
   return {
     ...rp,
@@ -719,9 +771,9 @@ module.exports = {
   getIdentity, upsertIdentity,
   getCurrentAddress, upsertAddress,
   getPaymentCards, addPaymentCard, removePaymentCard,
-  getContacts, upsertContacts,
-  createGrant, getGrantsByUser, getGrantById, revokeGrant,
+  getContacts, upsertContacts, getVaultBundle,
+  createGrant, getGrantsByUser, getGrantById, revokeGrant, expireGrants,
   insertAuditEvent, getAuditEvents, verifyAuditChain,
-  getAllRelyingParties, getRelyingPartyById,
+  getAllRelyingParties, getRelyingPartyById, findRelyingPartyByClientId,
   deleteAccount, deleteVaultResource, exportUserData,
 };

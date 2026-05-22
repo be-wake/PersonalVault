@@ -162,9 +162,25 @@ export const relyingParties = {
 };
 
 // ── Audit ─────────────────────────────────────────────────────────────────────
+export type AuditResource = 'identity' | 'address' | 'payment' | 'contacts' | 'consent';
+export interface AuditFilters {
+  limit?:    number;
+  from?:     string;            // ISO timestamp
+  to?:       string;            // ISO timestamp
+  resource?: AuditResource;
+}
+
 export const auditApi = {
-  list: (userId: string, limit = 50) =>
-    request<{ events: AuditEvent[] }>(`/v1/audit/${userId}?limit=${limit}`),
+  list: (userId: string, opts: AuditFilters | number = {}) => {
+    // Back-compat: callers used to pass a bare number for `limit`.
+    const f: AuditFilters = typeof opts === 'number' ? { limit: opts } : opts;
+    const qs = new URLSearchParams();
+    qs.set('limit', String(f.limit ?? 50));
+    if (f.from)     qs.set('from',     f.from);
+    if (f.to)       qs.set('to',       f.to);
+    if (f.resource) qs.set('resource', f.resource);
+    return request<{ events: AuditEvent[] }>(`/v1/audit/${userId}?${qs.toString()}`);
+  },
 };
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -202,6 +218,8 @@ export interface AuditEvent {
   id: string; grant_id?: string; user_id: string; event_type: string;
   actor_type: string; actor_id: string; timestamp: string;
   rp_name?: string; rp_domain?: string;
+  label?: string;
+  metadata?: Record<string, unknown> | null;
 }
 
 export const SCOPE_LABELS: Record<string, string> = {

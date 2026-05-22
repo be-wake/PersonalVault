@@ -59,6 +59,10 @@ const PORT = process.env.PORT || 4000;
 
 // Module-level refs set inside start() so shutdown() can reach them.
 let _db;
+let _expiryTimer;
+
+// F5 — how often the scheduler scans for grants past their expiry.
+const EXPIRY_SCAN_MS = Number(process.env.EXPIRY_SCAN_INTERVAL_MS) || 5 * 60_000;
 
 async function start() {
   // ── 1. Secrets ───────────────────────────────────────────────────────────
@@ -93,6 +97,9 @@ async function start() {
   app.use('/auth',               authLimiter, require('./routes/auth'));
   app.use('/v1/consents',        apiLimiter,  require('./routes/consents'));
   app.use('/v1/account',         apiLimiter,  require('./routes/account'));
+  // RP API must be mounted before the catch-all '/v1' vault router, otherwise
+  // verifyToken on the vault router would reject RP-token requests to /v1/rp/*.
+  app.use('/v1/rp',              apiLimiter,  require('./routes/rp'));
   app.use('/v1',                 apiLimiter,  require('./routes/vault'));
   app.use('/v1/audit',           apiLimiter,  require('./routes/audit'));
   app.use('/v1/relying-parties', apiLimiter,  require('./routes/relyingParties'));
@@ -137,10 +144,41 @@ async function start() {
   // ── 5. WebSocket ──────────────────────────────────────────────────────────
   // ws/index.js imports auth.js which reads JWT_SECRET — deferred for the
   // same reason as routes above.
-  const { attachWebSocket } = require('./ws');
+  const { attachWebSocket, broadcastToUser } = require('./ws');
   attachWebSocket(server);
 
-  // ── 6. Listen ─────────────────────────────────────────────────────────────
+  // ── 6. Background jobs ─────────────────────────────────────────────────────
+  // F3 — deliver signed revocation webhooks when events are published
+  // (in-process listener fires only with the memory event bus; in prod a
+  // separate Service Bus subscription worker handles delivery).
+  require('./lib/webhooks').attachInProcessListener({ getRelyingParty: _db.getRelyingPartyById });
+
+  // F5 — periodically transition ACTIVE grants past their expiry to EXPIRED,
+  // writing an audit event, busting the revocation cache, and notifying the user.
+  await runExpirySweep();
+  _expiryTimer = setInterval(() => { runExpirySweep().catch(() => {}); }, EXPIRY_SCAN_MS);
+  _expiryTimer.unref();
+
+  async function runExpirySweep() {
+    try {
+      const expired = await _db.expireGrants();
+      if (!expired.length) return;
+      log.info({ count: expired.length }, 'Consent grants expired by scheduler');
+      for (const g of expired) {
+        try { await require('./lib/redisClient').revokeGrant(g.id); } catch {}
+        try {
+          await require('./lib/serviceBus').publish('consent.expired', {
+            grantId: g.id, userId: g.user_id, relyingPartyId: g.relying_party_id, occurredAt: new Date().toISOString(),
+          });
+        } catch {}
+        try { broadcastToUser(g.user_id, { type: 'CONSENT_EXPIRED', grantId: g.id }); } catch {}
+      }
+    } catch (err) {
+      log.error({ err }, 'Expiry sweep failed');
+    }
+  }
+
+  // ── 7. Listen ─────────────────────────────────────────────────────────────
   server.listen(PORT, () => {
     log.info(
       { port: PORT, logLevel: logger.level, nodeEnv: process.env.NODE_ENV ?? 'development' },
@@ -168,6 +206,8 @@ async function shutdown(signal) {
   forceTimer.unref();
 
   try {
+    if (_expiryTimer) { clearInterval(_expiryTimer); _expiryTimer = null; }
+
     await new Promise((resolve) => server.close(resolve));
     log.info('HTTP server closed');
 
