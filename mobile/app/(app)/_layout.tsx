@@ -1,6 +1,7 @@
 import { Redirect } from 'expo-router';
 import { Tabs } from 'expo-router';
 import { useAuth } from '@/src/lib/auth';
+import { WebSocketProvider } from '@/src/lib/ws';
 import LoadingSpinner from '@/src/components/LoadingSpinner';
 import { Colors } from '@/src/constants/colors';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,7 +12,10 @@ export default function AppLayout() {
   if (isLoading) return <LoadingSpinner />;
   if (!user) return <Redirect href="/(auth)/sign-in" />;
 
+  // One WebSocket for the authenticated app (F25) — every tab can react to
+  // CONSENT_GRANTED / CONSENT_REVOKED / CONSENT_EXPIRED in real time.
   return (
+    <WebSocketProvider>
     <Tabs
       screenOptions={{
         headerShown: false,
@@ -64,5 +68,6 @@ export default function AppLayout() {
         }}
       />
     </Tabs>
+    </WebSocketProvider>
   );
 }

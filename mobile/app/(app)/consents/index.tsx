@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/src/lib/auth';
+import { useRealtime, type RealtimeMessage } from '@/src/lib/ws';
 import { consents, ConsentGrant, SCOPE_LABELS } from '@/src/lib/api';
 import LoadingSpinner from '@/src/components/LoadingSpinner';
 import { Colors } from '@/src/constants/colors';
@@ -64,6 +65,14 @@ export default function ConsentsIndex() {
   useEffect(() => {
     load().finally(() => setLoading(false));
   }, [load]);
+
+  // Live updates (F25): grant/revoke/expiry anywhere refreshes the list.
+  const onRealtime = useCallback((msg: RealtimeMessage) => {
+    if (msg?.type?.startsWith('CONSENT_') || msg?.event?.startsWith('consent.')) {
+      load();
+    }
+  }, [load]);
+  useRealtime(onRealtime);
 
   async function onRefresh() {
     setRefreshing(true);

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth } from '@/src/lib/auth';
+import { useRealtime, type RealtimeMessage } from '@/src/lib/ws';
 import { consents, ConsentGrant, SCOPE_LABELS } from '@/src/lib/api';
 import Button from '@/src/components/Button';
 import Card from '@/src/components/Card';
@@ -53,6 +54,18 @@ export default function GrantDetail() {
       .catch(e => setError(e.message ?? 'Not found.'))
       .finally(() => setLoading(false));
   }, [user, grantId]);
+
+  // Live updates (F25): reflect revoke/expiry for this grant in real time.
+  const onRealtime = useCallback((msg: RealtimeMessage) => {
+    const affectedId = msg?.grant?.id ?? msg?.grantId;
+    if (affectedId !== grantId) return;
+    if (msg?.type === 'CONSENT_REVOKED' || msg?.event === 'consent.revoked') {
+      setGrant(g => g ? { ...g, status: 'REVOKED', revoked_at: (msg?.grant as any)?.revoked_at ?? new Date().toISOString() } : g);
+    } else if (msg?.type === 'CONSENT_EXPIRED' || msg?.event === 'consent.expired') {
+      setGrant(g => g ? { ...g, status: 'EXPIRED' } : g);
+    }
+  }, [grantId]);
+  useRealtime(onRealtime);
 
   async function handleRevoke() {
     if (!grant) return;

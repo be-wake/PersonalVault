@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/src/lib/auth';
+import { useRealtime, type RealtimeMessage } from '@/src/lib/ws';
 import { consents, auditApi } from '@/src/lib/api';
 import Card from '@/src/components/Card';
 import { Colors } from '@/src/constants/colors';
@@ -25,7 +26,7 @@ export default function Dashboard() {
   const [stats, setStats] = useState<Stats>({ activeConsents: 0, recentEvents: 0 });
   const [refreshing, setRefreshing] = useState(false);
 
-  async function load() {
+  const load = useCallback(async () => {
     if (!user) return;
     try {
       const [c, a] = await Promise.allSettled([
@@ -40,9 +41,15 @@ export default function Dashboard() {
         recentEvents: a.status === 'fulfilled' ? a.value.events.length : 0,
       });
     } catch {}
-  }
+  }, [user]);
 
-  useEffect(() => { load(); }, [user]);
+  useEffect(() => { load(); }, [load]);
+
+  // Live updates (F25): keep the stats fresh when consents change.
+  const onRealtime = useCallback((msg: RealtimeMessage) => {
+    if (msg?.type?.startsWith('CONSENT_') || msg?.event?.startsWith('consent.')) load();
+  }, [load]);
+  useRealtime(onRealtime);
 
   async function onRefresh() {
     setRefreshing(true);
