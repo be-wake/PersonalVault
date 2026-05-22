@@ -12,6 +12,15 @@ permissions:
   id-token: write   # Required for OIDC login
   contents: read
 
+# O17 — resource names come from repo-level Actions Variables, with the current
+# hand-provisioned names as fallback defaults.
+env:
+  ACR:         ${{ vars.AZURE_ACR         || 'pdvacrvivekverma' }}
+  RG:          ${{ vars.AZURE_RG          || 'pdv-rg' }}
+  APP:         ${{ vars.FRONTEND_APP_NAME || 'pdv-web' }}
+  APP_URL:     ${{ vars.FRONTEND_URL      || 'https://pdv-web.niceground-cc94fda7.eastus.azurecontainerapps.io' }}
+  BACKEND_URL: ${{ vars.BACKEND_URL       || 'https://pdv-api.niceground-cc94fda7.eastus.azurecontainerapps.io' }}
+
 jobs:
   deploy:
     name: Build & Deploy Frontend
@@ -34,19 +43,19 @@ jobs:
       - name: Build & push image via ACR cloud build (NEXT_PUBLIC_API_URL baked in)
         run: |
           az acr build \
-            --registry pdvacrvivekverma \
+            --registry "$ACR" \
             --image pdv-frontend:${{ github.sha }} \
             --image pdv-frontend:latest \
             --file frontend/Dockerfile \
-            --build-arg NEXT_PUBLIC_API_URL=https://pdv-api.niceground-cc94fda7.eastus.azurecontainerapps.io \
+            --build-arg NEXT_PUBLIC_API_URL="$BACKEND_URL" \
             ./frontend
 
       - name: Deploy new image to Container App
         run: |
           az containerapp update \
-            --name pdv-web \
-            --resource-group pdv-rg \
-            --image pdvacrvivekverma.azurecr.io/pdv-frontend:${{ github.sha }}
+            --name "$APP" \
+            --resource-group "$RG" \
+            --image "$ACR.azurecr.io/pdv-frontend:${{ github.sha }}"
 
       - name: Print deployment summary
         run: |
@@ -54,5 +63,5 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| | |" >> $GITHUB_STEP_SUMMARY
           echo "|---|---|" >> $GITHUB_STEP_SUMMARY
-          echo "| Image | \`pdvacrvivekverma.azurecr.io/pdv-frontend:${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| URL   | https://pdv-web.niceground-cc94fda7.eastus.azurecontainerapps.io |" >> $GITHUB_STEP_SUMMARY
+          echo "| Image | \`$ACR.azurecr.io/pdv-frontend:${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| URL   | $APP_URL |" >> $GITHUB_STEP_SUMMARY

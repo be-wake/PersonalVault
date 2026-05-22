@@ -12,6 +12,15 @@ permissions:
   id-token: write   # Required for OIDC login
   contents: read
 
+# O17 — resource names come from repo-level Actions Variables, with the current
+# hand-provisioned names as fallback defaults so the pipeline keeps working even
+# before the variables are set. Set these under Settings → Variables → Actions.
+env:
+  ACR:     ${{ vars.AZURE_ACR        || 'pdvacrvivekverma' }}
+  RG:      ${{ vars.AZURE_RG         || 'pdv-rg' }}
+  APP:     ${{ vars.BACKEND_APP_NAME || 'pdv-api' }}
+  APP_URL: ${{ vars.BACKEND_URL      || 'https://pdv-api.niceground-cc94fda7.eastus.azurecontainerapps.io' }}
+
 jobs:
   deploy:
     name: Build & Deploy Backend
@@ -34,7 +43,7 @@ jobs:
       - name: Build & push image via ACR cloud build (no Docker needed)
         run: |
           az acr build \
-            --registry pdvacrvivekverma \
+            --registry "$ACR" \
             --image pdv-backend:${{ github.sha }} \
             --image pdv-backend:latest \
             --file backend/Dockerfile \
@@ -43,9 +52,9 @@ jobs:
       - name: Deploy new image to Container App
         run: |
           az containerapp update \
-            --name pdv-api \
-            --resource-group pdv-rg \
-            --image pdvacrvivekverma.azurecr.io/pdv-backend:${{ github.sha }}
+            --name "$APP" \
+            --resource-group "$RG" \
+            --image "$ACR.azurecr.io/pdv-backend:${{ github.sha }}"
 
       - name: Print deployment summary
         run: |
@@ -53,5 +62,5 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| | |" >> $GITHUB_STEP_SUMMARY
           echo "|---|---|" >> $GITHUB_STEP_SUMMARY
-          echo "| Image | \`pdvacrvivekverma.azurecr.io/pdv-backend:${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| URL   | https://pdv-api.niceground-cc94fda7.eastus.azurecontainerapps.io |" >> $GITHUB_STEP_SUMMARY
+          echo "| Image | \`$ACR.azurecr.io/pdv-backend:${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| URL   | $APP_URL |" >> $GITHUB_STEP_SUMMARY

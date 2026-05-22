@@ -48,21 +48,25 @@ jobs:
             --template-file infra/main.bicep \
             --parameters \
                 appSuffix=${{ github.event.inputs.app_suffix }} \
-                jwtSecret=${{ secrets.JWT_SECRET }} \
+                pgAdminPassword='${{ secrets.PG_ADMIN_PASSWORD }}' \
+                jwtSecret='${{ secrets.JWT_SECRET }}' \
+                jwtRefreshSecret='${{ secrets.JWT_REFRESH_SECRET }}' \
+                stepUpSecret='${{ secrets.STEPUP_SECRET }}' \
+                webhookHmacSecret='${{ secrets.WEBHOOK_HMAC_SECRET }}' \
+                fieldKekBase64='${{ secrets.FIELD_KEK_BASE64 }}' \
             --output json)
 
-          echo "$output" | jq .
+          echo "$output" | jq '.properties.outputs'
 
-          # Extract and expose the app names
-          backend=$(echo "$output"  | jq -r '.properties.outputs.backendAppName.value')
-          frontend=$(echo "$output" | jq -r '.properties.outputs.frontendAppName.value')
-          burl=$(echo "$output"     | jq -r '.properties.outputs.backendUrl.value')
-          furl=$(echo "$output"     | jq -r '.properties.outputs.frontendUrl.value')
+          burl=$(echo "$output"  | jq -r '.properties.outputs.backendFqdn.value')
+          furl=$(echo "$output"  | jq -r '.properties.outputs.frontendFqdn.value')
+          acr=$(echo "$output"   | jq -r '.properties.outputs.acrLoginServer.value')
+          kv=$(echo "$output"    | jq -r '.properties.outputs.keyVaultName.value')
 
-          echo "backend_app=$backend"   >> $GITHUB_OUTPUT
-          echo "frontend_app=$frontend" >> $GITHUB_OUTPUT
-          echo "backend_url=$burl"      >> $GITHUB_OUTPUT
-          echo "frontend_url=$furl"     >> $GITHUB_OUTPUT
+          echo "backend_url=https://$burl"   >> $GITHUB_OUTPUT
+          echo "frontend_url=https://$furl"  >> $GITHUB_OUTPUT
+          echo "acr=$acr"                    >> $GITHUB_OUTPUT
+          echo "kv=$kv"                      >> $GITHUB_OUTPUT
 
       - name: Print deployment summary
         run: |
@@ -70,12 +74,12 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Resource | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|---|---|" >> $GITHUB_STEP_SUMMARY
-          echo "| Backend App Name  | \`${{ steps.deploy.outputs.backend_app }}\` |"  >> $GITHUB_STEP_SUMMARY
-          echo "| Frontend App Name | \`${{ steps.deploy.outputs.frontend_app }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Backend URL  | ${{ steps.deploy.outputs.backend_url }} |"  >> $GITHUB_STEP_SUMMARY
-          echo "| Frontend URL | ${{ steps.deploy.outputs.frontend_url }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Backend URL   | ${{ steps.deploy.outputs.backend_url }} |"  >> $GITHUB_STEP_SUMMARY
+          echo "| Frontend URL  | ${{ steps.deploy.outputs.frontend_url }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| ACR           | \`${{ steps.deploy.outputs.acr }}\` |"      >> $GITHUB_STEP_SUMMARY
+          echo "| Key Vault     | \`${{ steps.deploy.outputs.kv }}\` |"       >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Next step" >> $GITHUB_STEP_SUMMARY
-          echo "Set these as GitHub Actions **Variables** (not secrets):" >> $GITHUB_STEP_SUMMARY
-          echo "- \`BACKEND_APP_NAME\`  = \`${{ steps.deploy.outputs.backend_app }}\`"  >> $GITHUB_STEP_SUMMARY
-          echo "- \`FRONTEND_APP_NAME\` = \`${{ steps.deploy.outputs.frontend_app }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "Set these as GitHub Actions **Variables** so the deploy workflows target this stack:" >> $GITHUB_STEP_SUMMARY
+          echo "- \`BACKEND_URL\`  = \`${{ steps.deploy.outputs.backend_url }}\`"  >> $GITHUB_STEP_SUMMARY
+          echo "- \`FRONTEND_URL\` = \`${{ steps.deploy.outputs.frontend_url }}\`" >> $GITHUB_STEP_SUMMARY
