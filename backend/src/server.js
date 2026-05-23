@@ -3,6 +3,7 @@
 const express       = require('express');
 const cors          = require('cors');
 const helmet        = require('helmet');
+const cookieParser  = require('cookie-parser');
 const http          = require('http');
 const { v4: uuidv4 } = require('uuid');
 const logger        = require('./lib/logger');
@@ -41,6 +42,9 @@ if (IS_PROD && corsOrigins.length === 0) {
 }
 
 app.use(cors({ origin: corsOrigins, credentials: true }));
+
+// Parse cookies — needed for the httpOnly session cookie (S1).
+app.use(cookieParser());
 
 // Cap request body at 64 KB — vault payloads are tiny.
 app.use(express.json({ limit: '64kb' }));

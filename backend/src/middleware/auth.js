@@ -92,13 +92,18 @@ function unauthorized(req, res, code, message) {
 }
 
 function verifyToken(req, res, next) {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    (req.log ?? log).warn({ requestId: req.id, path: req.path }, 'Missing or malformed Authorization header');
-    return unauthorized(req, res, 'TOKEN_INVALID', 'Authorization header missing or malformed.');
+  // S1 — prefer the httpOnly session cookie (set for web clients); fall back to
+  // the Authorization: Bearer header (used by mobile and direct API callers).
+  const cookieToken  = req.cookies?.pdv_session;
+  const authHeader   = req.headers.authorization;
+  const bearerToken  = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  const token        = cookieToken || bearerToken;
+
+  if (!token) {
+    (req.log ?? log).warn({ requestId: req.id, path: req.path }, 'No auth credential — cookie or Bearer header required');
+    return unauthorized(req, res, 'TOKEN_INVALID', 'Authentication required.');
   }
 
-  const token = authHeader.slice(7);
   try {
     req.user = verifyAccessToken(token);
     return next();

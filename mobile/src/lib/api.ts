@@ -161,6 +161,19 @@ export const relyingParties = {
   list: () => request<{ relyingParties: RelyingParty[] }>('/v1/relying-parties'),
 };
 
+// ── Account (GDPR / F9 / F10) ─────────────────────────────────────────────────
+export const accountApi = {
+  export:     () => request<Record<string, unknown>>('/v1/account/export'),
+  verifyAuditChain: () => request<{ valid: boolean; checked: number; firstBrokenAt?: string }>('/v1/account/audit/verify'),
+  deleteVaultResource: (resource: string) =>
+    request<{ ok: boolean }>(`/v1/account/vault/${resource}`, { method: 'DELETE' }),
+  deleteAccount: (stepUpToken: string) =>
+    request<{ ok: boolean }>('/v1/account', {
+      method: 'DELETE',
+      headers: { 'X-PDV-Stepup': stepUpToken },
+    }),
+};
+
 // ── Audit ─────────────────────────────────────────────────────────────────────
 export type AuditResource = 'identity' | 'address' | 'payment' | 'contacts' | 'consent';
 export interface AuditFilters {

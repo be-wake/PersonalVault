@@ -57,7 +57,16 @@ function attachWebSocket(server) {
     // as liveness. We don't otherwise act on client messages.
     ws.on('message', () => { ws.isAlive = true; });
     const url   = new URL(req.url, 'ws://localhost');
-    const token = url.searchParams.get('token');
+
+    // S1/S6 — prefer the httpOnly session cookie (set by the web client, sent
+    // automatically on the HTTP upgrade); fall back to the ?token query param
+    // (used by the mobile app, which can't set cookies).
+    const cookieToken = (() => {
+      const raw = req.headers.cookie || '';
+      const match = raw.match(/(?:^|;\s*)pdv_session=([^;]+)/);
+      return match ? decodeURIComponent(match[1]) : null;
+    })();
+    const token = cookieToken || url.searchParams.get('token');
 
     if (!token) {
       log.warn({ ip: req.socket?.remoteAddress }, 'WS connection rejected — no token');

@@ -9,6 +9,35 @@ const { issueStepUpToken } = require('../middleware/stepUp');
 const { validate } = require('../middleware/validate');
 const logger   = require('../lib/logger');
 
+const IS_PROD = process.env.NODE_ENV === 'production';
+
+// S1 — cookie settings for the httpOnly session and refresh cookies.
+// SameSite:Strict prevents CSRF without needing a separate CSRF token.
+const SESSION_COOKIE_OPTS = {
+  httpOnly: true,
+  secure:   IS_PROD,
+  sameSite: 'strict',
+  path:     '/',
+  maxAge:   15 * 60 * 1000,            // 15 min — matches JWT ACCESS_TTL
+};
+const REFRESH_COOKIE_OPTS = {
+  httpOnly: true,
+  secure:   IS_PROD,
+  sameSite: 'strict',
+  path:     '/auth/refresh',           // scoped so it isn't sent to other endpoints
+  maxAge:   30 * 24 * 60 * 60 * 1000, // 30 days — matches JWT REFRESH_TTL
+};
+
+function setAuthCookies(res, accessToken, refreshToken) {
+  res.cookie('pdv_session', accessToken, SESSION_COOKIE_OPTS);
+  if (refreshToken) res.cookie('pdv_refresh', refreshToken, REFRESH_COOKIE_OPTS);
+}
+
+function clearAuthCookies(res) {
+  res.clearCookie('pdv_session', { path: '/' });
+  res.clearCookie('pdv_refresh', { path: '/auth/refresh' });
+}
+
 const log    = logger.child({ module: 'route:auth' });
 const router = express.Router();
 
@@ -59,6 +88,10 @@ router.post('/register', validate({ body: registerSchema }), wrap(async (req, re
   const accessToken  = issueToken(userId, email.toLowerCase());
   const refreshToken = issueRefreshToken(userId);
 
+  // S1 — set httpOnly cookies for web clients; still return tokens in the body
+  // so native mobile clients (which can't use cookies) keep working.
+  setAuthCookies(res, accessToken, refreshToken);
+
   res.status(201).json({
     accessToken,
     refreshToken,
@@ -87,6 +120,8 @@ router.post('/login', validate({ body: loginSchema }), wrap(async (req, res) => 
   const accessToken  = issueToken(user.id, user.email);
   const refreshToken = issueRefreshToken(user.id);
 
+  setAuthCookies(res, accessToken, refreshToken);
+
   res.json({
     accessToken,
     refreshToken,
@@ -96,7 +131,8 @@ router.post('/login', validate({ body: loginSchema }), wrap(async (req, res) => 
 
 // POST /auth/refresh
 router.post('/refresh', wrap(async (req, res) => {
-  const { refreshToken } = req.body;
+  // S1 — accept refresh token from httpOnly cookie (web) or request body (mobile).
+  const refreshToken = req.cookies?.pdv_refresh || req.body?.refreshToken;
   if (!refreshToken) {
     return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'refreshToken is required.' } });
   }
@@ -116,8 +152,21 @@ router.post('/refresh', wrap(async (req, res) => {
 
   (req.log ?? log).debug({ userId: user.id }, 'Access token refreshed');
   const newAccessToken = issueToken(user.id, user.email);
+
+  // Rotate the session cookie for web clients; still return the token in the body
+  // so mobile clients can update their SecureStore.
+  res.cookie('pdv_session', newAccessToken, SESSION_COOKIE_OPTS);
+
   res.json({ accessToken: newAccessToken });
 }));
+
+// POST /auth/logout — clears the httpOnly cookies for web clients.
+// Mobile clients should discard their stored tokens on the client side.
+router.post('/logout', (req, res) => {
+  clearAuthCookies(res);
+  (req.log ?? log).debug({ requestId: req.id }, 'Auth cookies cleared');
+  res.json({ ok: true });
+});
 
 // GET /auth/me
 router.get('/me', verifyToken, wrap(async (req, res) => {

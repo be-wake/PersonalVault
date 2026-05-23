@@ -41,7 +41,6 @@ const WSContext = createContext<WSContextValue>({
   subscribe: () => () => {},
 });
 
-const TOKEN_KEY     = 'pdv_token';
 const PING_MS       = 25_000;
 const MAX_BACKOFF_MS = 30_000;
 
@@ -71,14 +70,13 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     };
 
     const connect = () => {
-      const token = typeof window !== 'undefined' ? localStorage.getItem(TOKEN_KEY) : null;
-      if (!token) return;
-
       const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
       const wsBase  = apiBase.replace(/^http/, 'ws');
       setStatus('connecting');
 
-      const ws = new WebSocket(`${wsBase}/v1/ws?token=${encodeURIComponent(token)}`);
+      // S1/S6 — the pdv_session httpOnly cookie is sent automatically on the
+      // WebSocket upgrade request; no token in the URL query string needed.
+      const ws = new WebSocket(`${wsBase}/v1/ws`);
       wsRef.current = ws;
 
       ws.onopen = () => {

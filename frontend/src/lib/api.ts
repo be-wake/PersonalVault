@@ -1,78 +1,84 @@
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
-// ── Token storage ────────────────────────────────────────────────────────────
-// localStorage is XSS-vulnerable; see PRODUCTION_READINESS_REVIEW.md §S1 for
-// the planned move to httpOnly cookies. Centralised here so that migration
-// becomes a one-place change.
-const TOKEN_KEY         = 'pdv_token';
+// ── Token storage (S1) ───────────────────────────────────────────────────────
+// The backend now issues httpOnly Secure SameSite=Strict cookies on login, so
+// the web client no longer stores the access token in localStorage (where XSS
+// can reach it). localStorage is kept only for the optional user-object cache
+// and for the legacy refresh-token fallback (removed once all sessions rotate).
+//
+// For requests the browser attaches the cookie automatically via
+// `credentials: 'include'`; the Authorization header is omitted on web.
+
 const REFRESH_TOKEN_KEY = 'pdv_refresh_token';
 
-function getToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  return localStorage.getItem(TOKEN_KEY);
+/** No-op on web — the access token lives exclusively in the httpOnly cookie. */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function storeTokens(_accessToken: string, refreshToken?: string | null) {
+  // Refresh token kept in localStorage only as a fallback for pre-cookie
+  // sessions. The backend's /auth/refresh also accepts the pdv_refresh cookie,
+  // so this will be empty for any session created after the S1 rollout.
+  if (typeof window === 'undefined') return;
+  if (refreshToken) localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
 }
+
+export function clearTokens() {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem(REFRESH_TOKEN_KEY);
+  localStorage.removeItem('pdv_user');
+  // Ask the backend to clear the httpOnly cookies — we can't touch them from JS.
+  fetch(`${BASE_URL}/auth/logout`, { method: 'POST', credentials: 'include' }).catch(() => {});
+}
+
 function getRefreshToken(): string | null {
   if (typeof window === 'undefined') return null;
   return localStorage.getItem(REFRESH_TOKEN_KEY);
-}
-export function storeTokens(accessToken: string, refreshToken?: string | null) {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem(TOKEN_KEY, accessToken);
-  if (refreshToken) localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
-}
-export function clearTokens() {
-  if (typeof window === 'undefined') return;
-  localStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(REFRESH_TOKEN_KEY);
-  localStorage.removeItem('pdv_user');
 }
 
 // ── Refresh-token rotation ───────────────────────────────────────────────────
 // Concurrent requests that all get 401 should share a single /auth/refresh
 // call instead of stampeding the backend.
-let inflightRefresh: Promise<string | null> | null = null;
+let inflightRefresh: Promise<boolean> | null = null;
 
-async function refreshAccessToken(): Promise<string | null> {
-  const refreshToken = getRefreshToken();
-  if (!refreshToken) return null;
+async function refreshAccessToken(): Promise<boolean> {
+  // S1 — The pdv_refresh cookie is scoped to /auth/refresh, so it is sent
+  // automatically. We also include the localStorage fallback for older sessions.
+  const legacyRefreshToken = getRefreshToken();
   try {
     const res = await fetch(`${BASE_URL}/auth/refresh`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ refreshToken }),
+      method:      'POST',
+      credentials: 'include',
+      headers:     { 'Content-Type': 'application/json' },
+      body:        legacyRefreshToken ? JSON.stringify({ refreshToken: legacyRefreshToken }) : undefined,
     });
     if (!res.ok) {
-      // Refresh token itself is invalid/expired — drop everything; the
-      // AuthProvider's next /auth/me will redirect to sign-in.
       clearTokens();
-      return null;
+      return false;
     }
-    const body = await res.json() as { accessToken: string };
-    if (typeof window !== 'undefined') localStorage.setItem(TOKEN_KEY, body.accessToken);
-    return body.accessToken;
+    return true;
   } catch {
     clearTokens();
-    return null;
+    return false;
   }
 }
 
 async function request<T>(path: string, options: RequestInit = {}, _retried = false): Promise<T> {
-  const token = getToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>),
   };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  const res = await fetch(`${BASE_URL}${path}`, { ...options, headers });
+  // S1 — cookies are sent automatically; no Authorization header needed for web.
+  const res = await fetch(`${BASE_URL}${path}`, {
+    ...options,
+    headers,
+    credentials: 'include',   // send pdv_session cookie on every request
+  });
 
-  // On 401 from a protected endpoint, try a single refresh-then-retry.
-  // Skip /auth/* so /auth/refresh failures don't loop and /auth/login 401s
-  // (bad credentials) surface immediately.
-  if (res.status === 401 && !_retried && getRefreshToken() && !path.startsWith('/auth/')) {
+  // On 401 try a single refresh cycle then retry.
+  if (res.status === 401 && !_retried && !path.startsWith('/auth/')) {
     inflightRefresh ??= refreshAccessToken().finally(() => { inflightRefresh = null; });
-    const fresh = await inflightRefresh;
-    if (fresh) return request<T>(path, options, true);
+    const ok = await inflightRefresh;
+    if (ok) return request<T>(path, options, true);
   }
 
   if (!res.ok) {
