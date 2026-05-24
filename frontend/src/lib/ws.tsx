@@ -61,7 +61,8 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!user) { setStatus('closed'); return; }
+    // Initial state is 'closed'; on logout the ws.onclose handler resets it too.
+    if (!user) return;
     teardownRef.current = false;
 
     const clearTimers = () => {

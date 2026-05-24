@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -73,15 +73,15 @@ export default function CardsScreen() {
   const [adding, setAdding] = useState(false);
   const [formError, setFormError] = useState('');
 
-  async function load() {
+  const load = useCallback(async () => {
     if (!user) return;
     const { cards: c } = await vault.getCards(user.id);
     setCards(c);
-  }
+  }, [user]);
 
   useEffect(() => {
     load().finally(() => setLoading(false));
-  }, [user]);
+  }, [load]);
 
   async function onRefresh() {
     setRefreshing(true);

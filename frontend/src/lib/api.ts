@@ -12,7 +12,6 @@ const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 const REFRESH_TOKEN_KEY = 'pdv_refresh_token';
 
 /** No-op on web — the access token lives exclusively in the httpOnly cookie. */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function storeTokens(_accessToken: string, refreshToken?: string | null) {
   // Refresh token kept in localStorage only as a fallback for pre-cookie
   // sessions. The backend's /auth/refresh also accepts the pdv_refresh cookie,

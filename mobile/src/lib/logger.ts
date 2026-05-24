@@ -83,10 +83,11 @@ function emit(level: Level, module: string, msg: string, meta?: Record<string, u
   const ts = timestamp();
 
   // 1. Local console output
-  const pfx = localPrefix(level, module, ts);
-  if (level === 'error')      meta ? console.error(pfx, msg, meta) : console.error(pfx, msg);
-  else if (level === 'warn')  meta ? console.warn(pfx, msg, meta)  : console.warn(pfx, msg);
-  else                        meta ? console.log(pfx, msg, meta)   : console.log(pfx, msg);
+  const pfx  = localPrefix(level, module, ts);
+  const args = meta ? [pfx, msg, meta] : [pfx, msg];
+  if (level === 'error')      console.error(...args);
+  else if (level === 'warn')  console.warn(...args);
+  else                        console.log(...args);
 
   // 2. Forward to shipper if registered and level qualifies
   if (_shipper && SHIP_LEVELS.has(level)) {

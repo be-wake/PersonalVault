@@ -33,9 +33,10 @@ yarn-error.*
 # local env files
 .env*.local
 
-# Google Play service account key — never commit this
+# Google Play / GCP service account keys — never commit these
 google-service-account.json
 *-service-account*.json
+tijori-*.json
 
 # typescript
 *.tsbuildinfo

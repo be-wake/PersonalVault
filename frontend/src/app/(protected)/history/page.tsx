@@ -22,6 +22,7 @@ export default function HistoryPage() {
 
   useEffect(() => {
     if (!user) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: reset spinner when filter changes
     setLoading(true);
     api.audit
       .list(user.id, { resource: resource || undefined, limit: 50 })

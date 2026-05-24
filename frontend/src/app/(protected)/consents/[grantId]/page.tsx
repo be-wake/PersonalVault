@@ -6,7 +6,6 @@ import { useAuthState } from '@/lib/auth';
 import { useRealtime, type RealtimeMessage } from '@/lib/ws';
 import { api, ConsentGrant, SCOPE_LABELS } from '@/lib/api';
 import RPHeader from '@/components/RPHeader';
-import StatusBadge from '@/components/StatusBadge';
 import Button from '@/components/Button';
 
 export default function ConsentDetailPage() {

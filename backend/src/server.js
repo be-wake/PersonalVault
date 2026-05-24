@@ -169,13 +169,13 @@ async function start() {
       if (!expired.length) return;
       log.info({ count: expired.length }, 'Consent grants expired by scheduler');
       for (const g of expired) {
-        try { await require('./lib/redisClient').revokeGrant(g.id); } catch {}
+        try { await require('./lib/redisClient').revokeGrant(g.id); } catch { /* best-effort */ }
         try {
           await require('./lib/serviceBus').publish('consent.expired', {
             grantId: g.id, userId: g.user_id, relyingPartyId: g.relying_party_id, occurredAt: new Date().toISOString(),
           });
-        } catch {}
-        try { broadcastToUser(g.user_id, { type: 'CONSENT_EXPIRED', grantId: g.id }); } catch {}
+        } catch { /* best-effort */ }
+        try { broadcastToUser(g.user_id, { type: 'CONSENT_EXPIRED', grantId: g.id }); } catch { /* best-effort */ }
       }
     } catch (err) {
       log.error({ err }, 'Expiry sweep failed');
@@ -216,8 +216,8 @@ async function shutdown(signal) {
     log.info('HTTP server closed');
 
     // Drain connections in order: Redis → Service Bus → DB pool
-    try { await require('./lib/redisClient').close();  log.info('Redis closed'); }  catch {}
-    try { await require('./lib/serviceBus').close();   log.info('Service Bus closed'); } catch {}
+    try { await require('./lib/redisClient').close();  log.info('Redis closed'); }  catch { /* best-effort */ }
+    try { await require('./lib/serviceBus').close();   log.info('Service Bus closed'); } catch { /* best-effort */ }
     if (_db) { await _db.close(); log.info('DB pool closed'); }
 
     process.exit(0);
