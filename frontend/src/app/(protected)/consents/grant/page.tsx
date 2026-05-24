@@ -75,7 +75,6 @@ export default function GrantPage() {
     setGranting(true);
     try {
       const grant = await api.consents.create({
-        user_id: user.id,
         relying_party_id: selectedRp.id,
         scopes: selectedScopes,
       });
