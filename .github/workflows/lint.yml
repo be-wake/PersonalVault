@@ -5,13 +5,50 @@ name: Lint
 on:
   push:
     branches: [main]
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - "mobile/**"
+      - ".github/workflows/lint.yml"
   pull_request:
     branches: [main]
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - "mobile/**"
+      - ".github/workflows/lint.yml"
 
 jobs:
+  detect-changes:
+    name: Detect Changed Areas
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      mobile: ${{ steps.filter.outputs.mobile }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect changes by directory
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+              - '.github/workflows/lint.yml'
+            frontend:
+              - 'frontend/**'
+              - '.github/workflows/lint.yml'
+            mobile:
+              - 'mobile/**'
+              - '.github/workflows/lint.yml'
+
   # ── Backend (Node.js / Express — plain JS) ──────────────────────────────────
   lint-backend:
     name: Lint Backend
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.backend == 'true' }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -36,6 +73,8 @@ jobs:
   # ── Frontend (Next.js — TypeScript) ─────────────────────────────────────────
   lint-frontend:
     name: Lint Frontend
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.frontend == 'true' }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -60,6 +99,8 @@ jobs:
   # ── Mobile (Expo SDK 54 / React Native — TypeScript) ────────────────────────
   lint-mobile:
     name: Lint Mobile
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.mobile == 'true' }}
     runs-on: ubuntu-latest
     defaults:
       run:
