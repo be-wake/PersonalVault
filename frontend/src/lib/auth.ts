@@ -10,7 +10,8 @@ import {
   type ReactNode,
 } from 'react';
 import type { User } from './api';
-import { auth as authApi, storeTokens, clearTokens } from './api';
+// C8 — consolidated api export; auth helpers live under api.auth.*
+import { api, storeTokens, clearTokens } from './api';
 
 interface AuthState {
   user: User | null;
@@ -45,9 +46,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // S1 — the access token now lives in an httpOnly cookie, invisible to JS.
     // We always call /auth/me to check session state; if the cookie is absent or
     // expired the backend returns 401 and we clear any stale client state.
-    authApi
+    api.auth
       .me()
-      .then(({ user: u }) => setUser(u))
+      .then((u) => setUser(u))
       .catch(() => {
         clearTokens();
         setUser(null);
@@ -56,7 +57,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
-    const { refreshToken, user: u } = await authApi.login(email, password);
+    const { refreshToken, user: u } = await api.auth.login(email, password);
     // S1 — access token is now set as an httpOnly cookie by the backend.
     // We still persist the refresh token in localStorage as a fallback for
     // the /auth/refresh body-param path (mobile parity).
@@ -65,7 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const register = useCallback(async (name: string, email: string, password: string) => {
-    const { refreshToken, user: u } = await authApi.register(name, email, password);
+    const { refreshToken, user: u } = await api.auth.register(name, email, password);
     storeTokens('', refreshToken);
     setUser(u);
   }, []);

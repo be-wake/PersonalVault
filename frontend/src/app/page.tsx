@@ -1,18 +1,20 @@
 'use client';
 
+// E23 — removed unused Button import.
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import Button from '@/components/Button';
+import { useAuthState } from '@/lib/auth';
 
 export default function LandingPage() {
   const router = useRouter();
+  // S1 — auth is now cookie-based; check session via AuthContext instead of localStorage.
+  const { user, loading } = useAuthState();
 
   useEffect(() => {
-    const token = localStorage.getItem('pdv_token');
-    if (token) {
+    if (!loading && user) {
       router.replace('/dashboard');
     }
-  }, [router]);
+  }, [loading, user, router]);
 
   return (
     <div

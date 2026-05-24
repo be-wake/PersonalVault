@@ -41,20 +41,37 @@ router.get('/:userId', wrap(async (req, res) => {
   res.json({ events: formatted });
 }));
 
+// E18 — actor-aware labels: distinguish user actions, RP reads, and system events.
 function buildLabel(event) {
-  const rp   = event.rp_name || 'Unknown service';
-  const meta = event.metadata || {};
+  const rp     = event.rp_name || 'Unknown service';
+  const meta   = event.metadata || {};
+  const byUser = event.actor_type === 'user';
+
   switch (event.event_type) {
-    case 'GRANT_CREATED': return `You granted ${rp} access to your data`;
-    case 'REVOKED':       return `You revoked ${rp}'s access to your data`;
-    case 'EXPIRED':       return `${rp}'s access to your data expired`;
+    case 'GRANT_CREATED':
+      return byUser
+        ? `You granted ${rp} access to your data`
+        : `${rp} was granted access to your data`;
+    case 'REVOKED':
+      return byUser
+        ? `You revoked ${rp}'s access to your data`
+        : `${rp}'s access to your data was revoked`;
+    case 'EXPIRED':
+      return `${rp}'s access to your data expired`;
     case 'ACCESS':
-      if (meta.action === 'UPDATE')      return `You updated your ${meta.resource || 'vault'} data`;
-      if (meta.action === 'ADD_CARD')    return 'You added a new payment card';
-      if (meta.action === 'REMOVE_CARD') return 'You removed a payment card';
-      return `${rp} accessed your data`;
-    case 'SCOPE_CHANGED':  return `${rp}'s access scope was updated`;
-    case 'GRANT_RENEWED':  return `You renewed ${rp}'s access`;
+      if (byUser) {
+        if (meta.action === 'UPDATE')      return `You updated your ${meta.resource || 'vault'} data`;
+        if (meta.action === 'ADD_CARD')    return 'You added a new payment card';
+        if (meta.action === 'REMOVE_CARD') return 'You removed a payment card';
+        return `You accessed your ${meta.resource || 'vault'} data`;
+      }
+      // RP read via scoped token (F2)
+      return `${rp} read your ${meta.resource || 'vault'} data`;
+    case 'GDPR_EXPORT':   return 'You exported your personal data';
+    case 'GDPR_DELETE':   return 'You deleted your account';
+    case 'VAULT_DELETE':  return `You deleted your ${meta.resource || 'vault'} data`;
+    case 'SCOPE_CHANGED': return `${rp}'s access scope was updated`;
+    case 'GRANT_RENEWED': return `You renewed ${rp}'s access`;
     default: return `Event: ${event.event_type}`;
   }
 }

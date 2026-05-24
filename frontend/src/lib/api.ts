@@ -93,77 +93,6 @@ async function request<T>(path: string, options: RequestInit = {}, _retried = fa
   return res.json() as T;
 }
 
-// ── Auth ──────────────────────────────────────────────────────────────────────
-export const auth = {
-  register: (name: string, email: string, password: string) =>
-    request<{ accessToken: string; refreshToken: string; user: User }>('/auth/register', {
-      method: 'POST',
-      body: JSON.stringify({ name, email, password }),
-    }),
-  login: (email: string, password: string) =>
-    request<{ accessToken: string; refreshToken: string; user: User }>('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ email, password }),
-    }),
-  me: () => request<{ user: User }>('/auth/me'),
-};
-
-// ── Consents ──────────────────────────────────────────────────────────────────
-export const consents = {
-  list: (userId: string) =>
-    request<{ grants: ConsentGrant[] }>(`/v1/consents/${userId}`),
-  get: (userId: string, grantId: string) =>
-    request<{ grant: ConsentGrant }>(`/v1/consents/${userId}/${grantId}`),
-  create: (body: { relyingPartyId: string; scopes: string[]; purpose: string; expiresAt?: string | null }) =>
-    request<{ grant: ConsentGrant }>('/v1/consents', { method: 'POST', body: JSON.stringify(body) }),
-  revoke: (grantId: string) =>
-    request<{ grant: ConsentGrant }>(`/v1/consents/${grantId}`, { method: 'DELETE' }),
-};
-
-// ── Vault ─────────────────────────────────────────────────────────────────────
-export const vault = {
-  getIdentity: (userId: string) =>
-    request<{ identity: IdentityData }>(`/v1/identity/${userId}`),
-  updateIdentity: (userId: string, data: Partial<IdentityData>) =>
-    request<{ identity: IdentityData }>(`/v1/identity/${userId}`, { method: 'PUT', body: JSON.stringify(data) }),
-
-  getAddress: (userId: string) =>
-    request<{ address: AddressData }>(`/v1/address/${userId}`),
-  updateAddress: (userId: string, data: Partial<AddressData>) =>
-    request<{ address: AddressData }>(`/v1/address/${userId}`, { method: 'PUT', body: JSON.stringify(data) }),
-
-  getCards: (userId: string) =>
-    request<{ cards: PaymentCard[] }>(`/v1/payment/${userId}/cards`),
-  addCard: (userId: string, data: { card_type: string; last_4: string; expiry_mm_yy: string }) =>
-    request<{ card: PaymentCard }>(`/v1/payment/${userId}/cards`, { method: 'POST', body: JSON.stringify(data) }),
-  removeCard: (userId: string, cardId: string) =>
-    request<{ success: boolean }>(`/v1/payment/${userId}/cards/${cardId}`, { method: 'DELETE' }),
-
-  getContacts: (userId: string) =>
-    request<{ contacts: ContactsData }>(`/v1/contacts/${userId}`),
-  updateContacts: (userId: string, data: Partial<ContactsData>) =>
-    request<{ contacts: ContactsData }>(`/v1/contacts/${userId}`, { method: 'PUT', body: JSON.stringify(data) }),
-};
-
-// ── Audit ─────────────────────────────────────────────────────────────────────
-export const audit = {
-  list: (userId: string, params?: { from?: string; to?: string; resource?: string; limit?: number }) => {
-    const qs = new URLSearchParams();
-    if (params?.from) qs.set('from', params.from);
-    if (params?.to) qs.set('to', params.to);
-    if (params?.resource) qs.set('resource', params.resource);
-    if (params?.limit) qs.set('limit', String(params.limit));
-    const query = qs.toString() ? `?${qs.toString()}` : '';
-    return request<{ events: AuditEvent[] }>(`/v1/audit/${userId}${query}`);
-  },
-};
-
-// ── Relying Parties ───────────────────────────────────────────────────────────
-export const relyingParties = {
-  list: () => request<{ relyingParties: RelyingParty[] }>('/v1/relying-parties'),
-  get: (id: string) => request<{ relyingParty: RelyingParty }>(`/v1/relying-parties/${id}`),
-};
-
 // ── Types ─────────────────────────────────────────────────────────────────────
 export interface User {
   id: string;
@@ -214,6 +143,7 @@ export interface IdentityData {
   updated_at?: string;
 }
 
+// E1 — Postgres returns BOOLEAN, not a number. Was incorrectly typed as number.
 export interface AddressData {
   id?: string;
   user_id?: string;
@@ -224,7 +154,7 @@ export interface AddressData {
   state?: string;
   postal?: string;
   country?: string;
-  is_current?: number;
+  is_current?: boolean;
   created_at?: string;
 }
 
@@ -238,12 +168,16 @@ export interface PaymentCard {
   created_at: string;
 }
 
+// F8 — social / secondary contact handles added to the contacts table.
 export interface ContactsData {
   id?: string;
   user_id?: string;
   phone_primary?: string;
   phone_type?: string;
   email_secondary?: string;
+  linkedin_url?: string;
+  twitter_handle?: string;
+  website_url?: string;
   updated_at?: string;
 }
 
@@ -261,71 +195,95 @@ export interface AuditEvent {
   rp_domain?: string;
 }
 
-// ── Grouped `api` export (unwraps backend response envelopes) ─────────────────
+// ── C8: single `api` export — the only public interface for all API calls ─────
+// The previous dual-export pattern (individual named exports + `api.*` wrappers)
+// has been collapsed into one. All pages import from `api.*`.
+// auth.ts still imports `storeTokens` / `clearTokens` directly (they are not
+// part of the request/response cycle).
 export const api = {
   auth: {
     register: (name: string, email: string, password: string) =>
-      auth.register(name, email, password),
+      request<{ accessToken: string; refreshToken: string; user: User }>('/auth/register', {
+        method: 'POST',
+        body: JSON.stringify({ name, email, password }),
+      }),
     login: (email: string, password: string) =>
-      auth.login(email, password),
-    me: () => auth.me().then((r) => r.user),
+      request<{ accessToken: string; refreshToken: string; user: User }>('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email, password }),
+      }),
+    me: () => request<{ user: User }>('/auth/me').then((r) => r.user),
+    logout: () => request<void>('/auth/logout', { method: 'POST' }),
   },
+
   consents: {
     list: (userId: string): Promise<ConsentGrant[]> =>
-      consents.list(userId).then((r) => r.grants),
+      request<{ grants: ConsentGrant[] }>(`/v1/consents/${userId}`).then((r) => r.grants),
     get: (userId: string, grantId: string): Promise<ConsentGrant> =>
-      consents.get(userId, grantId).then((r) => r.grant),
+      request<{ grant: ConsentGrant }>(`/v1/consents/${userId}/${grantId}`).then((r) => r.grant),
     create: (body: {
-      user_id?: string;
       relying_party_id: string;
       scopes: string[];
       purpose?: string;
       expiresAt?: string | null;
     }): Promise<ConsentGrant> =>
-      consents
-        .create({
+      request<{ grant: ConsentGrant }>('/v1/consents', {
+        method: 'POST',
+        body: JSON.stringify({
           relyingPartyId: body.relying_party_id,
           scopes: body.scopes,
           purpose: body.purpose || 'User-initiated data sharing grant',
           expiresAt: body.expiresAt,
-        })
-        .then((r) => r.grant),
+        }),
+      }).then((r) => r.grant),
     revoke: (grantId: string): Promise<ConsentGrant> =>
-      consents.revoke(grantId).then((r) => r.grant),
+      request<{ grant: ConsentGrant }>(`/v1/consents/${grantId}`, { method: 'DELETE' }).then((r) => r.grant),
   },
+
   vault: {
     getIdentity: (userId: string): Promise<IdentityData> =>
-      vault.getIdentity(userId).then((r) => r.identity),
+      request<{ identity: IdentityData }>(`/v1/identity/${userId}`).then((r) => r.identity),
     updateIdentity: (userId: string, data: Partial<IdentityData>): Promise<IdentityData> =>
-      vault.updateIdentity(userId, data).then((r) => r.identity),
+      request<{ identity: IdentityData }>(`/v1/identity/${userId}`, { method: 'PUT', body: JSON.stringify(data) }).then((r) => r.identity),
+
     getAddress: (userId: string): Promise<AddressData> =>
-      vault.getAddress(userId).then((r) => r.address),
+      request<{ address: AddressData }>(`/v1/address/${userId}`).then((r) => r.address),
     updateAddress: (userId: string, data: Partial<AddressData>): Promise<AddressData> =>
-      vault.updateAddress(userId, data).then((r) => r.address),
+      request<{ address: AddressData }>(`/v1/address/${userId}`, { method: 'PUT', body: JSON.stringify(data) }).then((r) => r.address),
+    // F7 — fetch all historical addresses (current + archived) for address:history scope
+    getAddressHistory: (userId: string): Promise<AddressData[]> =>
+      request<{ history: AddressData[] }>(`/v1/address/${userId}/history`).then((r) => r.history),
+
     getCards: (userId: string): Promise<PaymentCard[]> =>
-      vault.getCards(userId).then((r) => r.cards),
-    addCard: (
-      userId: string,
-      data: { card_type: string; last_4: string; expiry_mm_yy: string },
-    ): Promise<PaymentCard> => vault.addCard(userId, data).then((r) => r.card),
-    removeCard: (userId: string, cardId: string) =>
-      vault.removeCard(userId, cardId),
+      request<{ cards: PaymentCard[] }>(`/v1/payment/${userId}/cards`).then((r) => r.cards),
+    addCard: (userId: string, data: { card_type: string; last_4: string; expiry_mm_yy: string }): Promise<PaymentCard> =>
+      request<{ card: PaymentCard }>(`/v1/payment/${userId}/cards`, { method: 'POST', body: JSON.stringify(data) }).then((r) => r.card),
+    removeCard: (userId: string, cardId: string): Promise<{ success: boolean }> =>
+      request<{ success: boolean }>(`/v1/payment/${userId}/cards/${cardId}`, { method: 'DELETE' }),
+
     getContacts: (userId: string): Promise<ContactsData> =>
-      vault.getContacts(userId).then((r) => r.contacts),
+      request<{ contacts: ContactsData }>(`/v1/contacts/${userId}`).then((r) => r.contacts),
     updateContacts: (userId: string, data: Partial<ContactsData>): Promise<ContactsData> =>
-      vault.updateContacts(userId, data).then((r) => r.contacts),
+      request<{ contacts: ContactsData }>(`/v1/contacts/${userId}`, { method: 'PUT', body: JSON.stringify(data) }).then((r) => r.contacts),
   },
+
   audit: {
-    list: (
-      userId: string,
-      params?: { from?: string; to?: string; resource?: string; limit?: number },
-    ): Promise<AuditEvent[]> => audit.list(userId, params).then((r) => r.events),
+    list: (userId: string, params?: { from?: string; to?: string; resource?: string; limit?: number }): Promise<AuditEvent[]> => {
+      const qs = new URLSearchParams();
+      if (params?.from)     qs.set('from', params.from);
+      if (params?.to)       qs.set('to', params.to);
+      if (params?.resource) qs.set('resource', params.resource);
+      if (params?.limit)    qs.set('limit', String(params.limit));
+      const query = qs.toString() ? `?${qs.toString()}` : '';
+      return request<{ events: AuditEvent[] }>(`/v1/audit/${userId}${query}`).then((r) => r.events);
+    },
   },
+
   relyingParties: {
     list: (): Promise<RelyingParty[]> =>
-      relyingParties.list().then((r) => r.relyingParties),
+      request<{ relyingParties: RelyingParty[] }>('/v1/relying-parties').then((r) => r.relyingParties),
     get: (id: string): Promise<RelyingParty> =>
-      relyingParties.get(id).then((r) => r.relyingParty),
+      request<{ relyingParty: RelyingParty }>(`/v1/relying-parties/${id}`).then((r) => r.relyingParty),
   },
 };
 

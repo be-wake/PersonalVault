@@ -11,11 +11,15 @@ const { sha256 } = require('../lib/crypto');
 //   • Local dev:           set in backend/.env
 //   Format: postgresql://user:password@host:5432/dbname?sslmode=require
 //
-// Azure PostgreSQL Flexible Server always enforces SSL. rejectUnauthorized:false
-// avoids the need to bundle the DigiCert CA certificate into the image.
+// Azure PostgreSQL Flexible Server enforces SSL and presents a cert signed by
+// DigiCert (trusted by Node's built-in CA bundle), so rejectUnauthorized:true
+// works out of the box.  Set DATABASE_SSL_REJECT_UNAUTHORIZED=false only when
+// connecting to a server with a self-signed cert (e.g. local dev via Docker).
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  ssl: process.env.NODE_ENV === 'production'
+    ? { rejectUnauthorized: process.env.DATABASE_SSL_REJECT_UNAUTHORIZED !== 'false' }
+    : false,
   max: 10,
   idleTimeoutMillis: 30_000,
   connectionTimeoutMillis: 5_000,
@@ -136,6 +140,10 @@ async function initSchema() {
     `ALTER TABLE audit_events   ADD COLUMN IF NOT EXISTS hash      TEXT`,
     // F20 — relying-party client-credentials secret (sha256 hash)
     `ALTER TABLE relying_parties ADD COLUMN IF NOT EXISTS client_secret_hash TEXT`,
+    // F8 — social / secondary contact handles
+    `ALTER TABLE contacts ADD COLUMN IF NOT EXISTS linkedin_url    TEXT`,
+    `ALTER TABLE contacts ADD COLUMN IF NOT EXISTS twitter_handle  TEXT`,
+    `ALTER TABLE contacts ADD COLUMN IF NOT EXISTS website_url     TEXT`,
   ];
   for (const statement of migrations) {
     await pool.query(statement);
@@ -293,6 +301,15 @@ async function getCurrentAddress(userId) {
   return rows[0] ?? null;
 }
 
+// F7 — address:history scope: return all addresses newest-first (current + archived).
+async function getAddressHistory(userId) {
+  const { rows } = await pool.query(
+    'SELECT * FROM addresses WHERE user_id = $1 ORDER BY created_at DESC',
+    [userId]
+  );
+  return rows;
+}
+
 async function upsertAddress(userId, data) {
   const client = await pool.connect();
   try {
@@ -354,19 +371,31 @@ async function upsertContacts(userId, data) {
   if (existing) {
     await pool.query(
       `UPDATE contacts
-       SET phone_primary=$1, phone_type=$2, email_secondary=$3, updated_at=NOW()
-       WHERE user_id=$4`,
+       SET phone_primary=$1, phone_type=$2, email_secondary=$3,
+           linkedin_url=$4, twitter_handle=$5, website_url=$6,
+           updated_at=NOW()
+       WHERE user_id=$7`,
       [
         data.phone_primary    ?? existing.phone_primary,
         data.phone_type       ?? existing.phone_type,
         data.email_secondary  ?? existing.email_secondary,
+        data.linkedin_url     ?? existing.linkedin_url,
+        data.twitter_handle   ?? existing.twitter_handle,
+        data.website_url      ?? existing.website_url,
         userId,
       ]
     );
   } else {
     await pool.query(
-      'INSERT INTO contacts (id, user_id, phone_primary, phone_type, email_secondary) VALUES ($1, $2, $3, $4, $5)',
-      [uuidv4(), userId, data.phone_primary ?? null, data.phone_type ?? null, data.email_secondary ?? null]
+      `INSERT INTO contacts (id, user_id, phone_primary, phone_type, email_secondary,
+                             linkedin_url, twitter_handle, website_url)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [
+        uuidv4(), userId,
+        data.phone_primary   ?? null, data.phone_type      ?? null,
+        data.email_secondary ?? null, data.linkedin_url    ?? null,
+        data.twitter_handle  ?? null, data.website_url     ?? null,
+      ]
     );
   }
 }
@@ -704,7 +733,11 @@ async function deleteVaultResource(userId, resource) {
       return true;
     case 'contacts':
       await pool.query(
-        `UPDATE contacts SET phone_primary=NULL, email_secondary=NULL, updated_at=NOW() WHERE user_id=$1`,
+        `UPDATE contacts
+         SET phone_primary=NULL, phone_type=NULL, email_secondary=NULL,
+             linkedin_url=NULL, twitter_handle=NULL, website_url=NULL,
+             updated_at=NOW()
+         WHERE user_id=$1`,
         [userId]);
       return true;
     default:
@@ -769,7 +802,7 @@ module.exports = {
   ping,
   createUser, findUserByEmail, findUserById,
   getIdentity, upsertIdentity,
-  getCurrentAddress, upsertAddress,
+  getCurrentAddress, getAddressHistory, upsertAddress,
   getPaymentCards, addPaymentCard, removePaymentCard,
   getContacts, upsertContacts, getVaultBundle,
   createGrant, getGrantsByUser, getGrantById, revokeGrant, expireGrants,

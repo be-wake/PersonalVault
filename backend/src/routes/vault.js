@@ -3,7 +3,7 @@
 const express  = require('express');
 const {
   getIdentity, upsertIdentity,
-  getCurrentAddress, upsertAddress,
+  getCurrentAddress, getAddressHistory, upsertAddress,
   getPaymentCards, addPaymentCard, removePaymentCard,
   getContacts, upsertContacts,
   insertAuditEvent,
@@ -80,6 +80,14 @@ router.get('/address/:userId', wrap(async (req, res) => {
   const data = await getCurrentAddress(req.params.userId);
   (req.log ?? log).debug({ userId: req.params.userId }, 'Read address');
   res.json({ address: data || {} });
+}));
+
+// F7 — address:history scope: all addresses, newest first (current + archived).
+router.get('/address/:userId/history', wrap(async (req, res) => {
+  if (req.params.userId !== req.user.sub) return forbidden(req, res);
+  const history = await getAddressHistory(req.params.userId);
+  (req.log ?? log).debug({ userId: req.params.userId, count: history.length }, 'Read address history');
+  res.json({ history });
 }));
 
 router.put('/address/:userId', wrap(async (req, res) => {
