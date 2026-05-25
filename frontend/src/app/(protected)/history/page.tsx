@@ -16,6 +16,7 @@ const RESOURCE_FILTERS = [
   { label: 'Contacts', value: 'contacts' },
   { label: 'Consent',  value: 'consent' },
 ];
+const AUDIT_PAGE_LIMIT = 50;
 
 export default function HistoryPage() {
   const { user } = useAuthState();
@@ -25,7 +26,7 @@ export default function HistoryPage() {
 
   const fetchEvents = useCallback(() => {
     if (!user) return Promise.resolve<AuditEvent[] | null>(null);
-    return api.audit.list(user.id, { resource: resource || undefined, limit: 50 });
+    return api.audit.list(user.id, { resource: resource || undefined, limit: AUDIT_PAGE_LIMIT });
   }, [user, resource]);
 
   const reload = useCallback(() => {

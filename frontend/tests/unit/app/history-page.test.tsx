@@ -27,6 +27,8 @@ import { useAuthState } from '../../../src/lib/auth';
 import { useRealtime } from '../../../src/lib/ws';
 import * as apiModule from '../../../src/lib/api';
 
+const AUDIT_PAGE_LIMIT = 50;
+
 const mockUseAuthState = useAuthState as jest.Mock;
 const mockUseRealtime = useRealtime as jest.Mock;
 const mockList = apiModule.api.audit.list as jest.Mock;
@@ -46,7 +48,7 @@ describe('HistoryPage', () => {
     render(<HistoryPage />);
 
     await waitFor(() =>
-      expect(mockList).toHaveBeenCalledWith('user-1', { resource: undefined, limit: 50 })
+      expect(mockList).toHaveBeenCalledWith('user-1', { resource: undefined, limit: AUDIT_PAGE_LIMIT })
     );
     expect(await screen.findByText('No audit events yet')).toBeInTheDocument();
   });
@@ -69,7 +71,7 @@ describe('HistoryPage', () => {
 
     await user.click(screen.getByRole('button', { name: 'Identity' }));
 
-    expect(mockList).toHaveBeenLastCalledWith('user-1', { resource: 'identity', limit: 50 });
+    expect(mockList).toHaveBeenLastCalledWith('user-1', { resource: 'identity', limit: AUDIT_PAGE_LIMIT });
     expect(container.querySelector('.spinner')).toBeInTheDocument();
 
     resolveNext?.([]);
