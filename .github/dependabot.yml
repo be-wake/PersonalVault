@@ -49,13 +49,24 @@ updates:
       - dependencies
       - mobile
     ignore:
-      # Expo SDK and React Native upgrades require manual testing
+      # ── Expo ecosystem ────────────────────────────────────────────────────────
+      # All expo-* packages use the Expo SDK version as their major version
+      # (expo-font 14.x = SDK 54, expo-font 56.x = SDK 56). Bumping any of them
+      # independently of the SDK upgrade breaks native module compatibility.
+      # Only update the entire Expo ecosystem together via a deliberate SDK upgrade.
       - dependency-name: expo
         update-types: [version-update:semver-major, version-update:semver-minor]
+      - dependency-name: expo-*
+        update-types: [version-update:semver-major, version-update:semver-minor]
+      # ── React / React Native ─────────────────────────────────────────────────
+      # react-native ships react-native-renderer compiled at a specific React
+      # version. Bumping react independently breaks the bridge at runtime.
       - dependency-name: react-native
         update-types: [version-update:semver-major, version-update:semver-minor]
       - dependency-name: react
-        update-types: [version-update:semver-major]
+        update-types: [version-update:semver-major, version-update:semver-minor, version-update:semver-patch]
+      - dependency-name: "@types/react"
+        update-types: [version-update:semver-major, version-update:semver-minor, version-update:semver-patch]
 
   # GitHub Actions
   - package-ecosystem: github-actions
