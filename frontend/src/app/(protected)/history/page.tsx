@@ -25,7 +25,7 @@ export default function HistoryPage() {
   const [resource, setResource] = useState('');
 
   const fetchEvents = useCallback(() => {
-    if (!user) return Promise.resolve<AuditEvent[]>([]);
+    if (!user) return Promise.resolve([]);
     return api.audit.list(user.id, { resource: resource || undefined, limit: AUDIT_PAGE_LIMIT });
   }, [user, resource]);
 
