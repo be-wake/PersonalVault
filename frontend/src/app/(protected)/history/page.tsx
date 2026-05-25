@@ -16,7 +16,7 @@ const RESOURCE_FILTERS = [
   { label: 'Contacts', value: 'contacts' },
   { label: 'Consent',  value: 'consent' },
 ];
-const AUDIT_PAGE_LIMIT = 50;
+export const AUDIT_PAGE_LIMIT = 50;
 
 export default function HistoryPage() {
   const { user } = useAuthState();

@@ -23,11 +23,10 @@ jest.mock('../../../src/lib/api', () => ({
 }));
 
 import HistoryPage from '../../../src/app/(protected)/history/page';
+import { AUDIT_PAGE_LIMIT } from '../../../src/app/(protected)/history/page';
 import { useAuthState } from '../../../src/lib/auth';
 import { useRealtime } from '../../../src/lib/ws';
 import * as apiModule from '../../../src/lib/api';
-
-const AUDIT_PAGE_LIMIT = 50;
 
 const mockUseAuthState = useAuthState as jest.Mock;
 const mockUseRealtime = useRealtime as jest.Mock;
