@@ -11,7 +11,15 @@
  */
 
 exports.up = (pgm) => {
-  pgm.createExtension('pgcrypto', { ifNotExists: true });
+  pgm.sql(`
+    DO $$
+    BEGIN
+      CREATE EXTENSION IF NOT EXISTS pgcrypto;
+    EXCEPTION
+      WHEN insufficient_privilege OR feature_not_supported THEN
+        RAISE NOTICE 'Skipping pgcrypto extension creation due to database permissions';
+    END $$;
+  `);
 
   // ── Users ──────────────────────────────────────────────────────────────────
   pgm.sql(`
