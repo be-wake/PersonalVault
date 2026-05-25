@@ -21,13 +21,13 @@
     "expo-router": "~6.0.23",
     "expo-secure-store": "~15.0.8",
     "expo-status-bar": "~56.0.4",
-    "react": "19.1.0",
+    "react": "19.2.6",
     "react-native": "0.81.5",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.25.2"
   },
   "devDependencies": {
-    "@types/react": "~19.1.10",
+    "@types/react": "~19.2.15",
     "babel-preset-expo": "~54.0.10",
     "eslint": "^8.57.0",
     "eslint-config-expo": "~9.2.0",
