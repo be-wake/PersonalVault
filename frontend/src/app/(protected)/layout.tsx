@@ -1,51 +1,27 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthState } from '@/lib/auth';
 import { WebSocketProvider } from '@/lib/ws';
 import BottomNav from '@/components/BottomNav';
+import Spinner from '@/components/Spinner';
 
-// AuthProvider is mounted at the root layout — this guard just reads from it.
-function AuthGuard({ children }: { children: React.ReactNode }) {
+function AuthGuard({ children }: { children: ReactNode }) {
   const { user, loading } = useAuthState();
   const router = useRouter();
 
   useEffect(() => {
-    if (!loading && !user) {
-      router.replace('/auth/sign-in');
-    }
+    if (!loading && !user) router.replace('/auth/sign-in');
   }, [user, loading, router]);
 
-  if (loading) {
-    return (
-      <div
-        style={{
-          minHeight: '100dvh',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: 'var(--color-bg)',
-        }}
-      >
-        <div className="spinner" />
-      </div>
-    );
-  }
+  if (loading) return <Spinner fullPage />;
+  if (!user)   return null;
 
-  if (!user) return null;
-
-  // One WebSocket for the whole authenticated app (F22/C6) — every screen can
-  // now react to CONSENT_GRANTED / CONSENT_REVOKED / CONSENT_EXPIRED.
   return (
     <WebSocketProvider>
-      <main
-        style={{
-          minHeight: '100dvh',
-          paddingBottom: 80,
-          background: 'var(--color-bg)',
-        }}
-      >
+      <main className="min-h-dvh pb-20 bg-[var(--color-bg)]">
         {children}
       </main>
       <BottomNav />
@@ -53,6 +29,6 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function ProtectedLayout({ children }: { children: React.ReactNode }) {
+export default function ProtectedLayout({ children }: { children: ReactNode }) {
   return <AuthGuard>{children}</AuthGuard>;
 }

@@ -3,81 +3,53 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthState } from '@/lib/auth';
-import { api, RelyingParty, SCOPE_LABELS } from '@/lib/api';
-import Button from '@/components/Button';
+import { api, type RelyingParty, SCOPE_LABELS } from '@/lib/api';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import Spinner from '@/components/Spinner';
+import PageHeader from '@/components/PageHeader';
 
 type Step = 'select-rp' | 'select-scopes' | 'authenticate' | 'success';
 
 const SCOPE_GROUPS = [
-  {
-    group: 'Identity',
-    icon: '👤',
-    scopes: ['identity:name', 'identity:email', 'identity:dob', 'identity:gov_id'],
-  },
-  {
-    group: 'Address',
-    icon: '🏠',
-    scopes: ['address:current', 'address:history'],
-  },
-  {
-    group: 'Payment',
-    icon: '💳',
-    scopes: ['payment:card_ref'],
-  },
-  {
-    group: 'Contacts',
-    icon: '📞',
-    scopes: ['contacts:phone', 'contacts:all'],
-  },
+  { group: 'Identity', icon: '👤', scopes: ['identity:name', 'identity:email', 'identity:dob', 'identity:gov_id'] },
+  { group: 'Address',  icon: '🏠', scopes: ['address:current', 'address:history'] },
+  { group: 'Payment',  icon: '💳', scopes: ['payment:card_ref'] },
+  { group: 'Contacts', icon: '📞', scopes: ['contacts:phone', 'contacts:all'] },
 ];
 
 export default function GrantPage() {
-  const { user } = useAuthState();
-  const router = useRouter();
+  const { user }  = useAuthState();
+  const router    = useRouter();
 
-  const [step, setStep] = useState<Step>('select-rp');
-  const [rps, setRps] = useState<RelyingParty[]>([]);
-  const [loadingRPs, setLoadingRPs] = useState(true);
-  const [selectedRp, setSelectedRp] = useState<RelyingParty | null>(null);
+  const [step,           setStep]           = useState<Step>('select-rp');
+  const [rps,            setRps]            = useState<RelyingParty[]>([]);
+  const [loadingRPs,     setLoadingRPs]     = useState(true);
+  const [selectedRp,     setSelectedRp]     = useState<RelyingParty | null>(null);
   const [selectedScopes, setSelectedScopes] = useState<string[]>([]);
-  const [pin, setPin] = useState('');
-  const [pinError, setPinError] = useState('');
-  const [granting, setGranting] = useState(false);
+  const [pin,            setPin]            = useState('');
+  const [pinError,       setPinError]       = useState('');
+  const [granting,       setGranting]       = useState(false);
   const [createdGrantId, setCreatedGrantId] = useState('');
 
   useEffect(() => {
-    api.relyingParties
-      .list()
-      .then(setRps)
-      .catch(() => {})
-      .finally(() => setLoadingRPs(false));
+    api.relyingParties.list().then(setRps).catch(() => {}).finally(() => setLoadingRPs(false));
   }, []);
 
   function toggleScope(scope: string) {
-    setSelectedScopes((prev) =>
-      prev.includes(scope) ? prev.filter((s) => s !== scope) : [...prev, scope]
-    );
+    setSelectedScopes((prev) => prev.includes(scope) ? prev.filter((s) => s !== scope) : [...prev, scope]);
   }
 
   async function handleGrant() {
-    // SECURITY-PLACEHOLDER: Demo-only PIN check. This is client-side and the
-    // backend does not enforce step-up auth on POST /v1/consents — anyone with
-    // a valid access token can grant a consent without ever seeing this prompt.
-    // Replace with a server-issued step-up token (X-PDV-Stepup) once the
-    // backend stepUp middleware is wired in. Tracked in
-    // PRODUCTION_READINESS_REVIEW.md §S2.
-    if (pin !== '1234') {
-      setPinError('Incorrect PIN. (Demo placeholder: enter 1234.)');
-      return;
-    }
+    if (pin !== '1234') { setPinError('Incorrect PIN. (Demo placeholder: enter 1234.)'); return; }
     if (!user || !selectedRp) return;
     setPinError('');
     setGranting(true);
     try {
-      const grant = await api.consents.create({
-        relying_party_id: selectedRp.id,
-        scopes: selectedScopes,
-      });
+      const grant = await api.consents.create({ relying_party_id: selectedRp.id, scopes: selectedScopes });
       setCreatedGrantId(grant.id);
       setStep('success');
     } catch (err: any) {
@@ -87,62 +59,30 @@ export default function GrantPage() {
     }
   }
 
-  // ── Step 1: Select RP ──
+  // ── Step 1: Select RP ──────────────────────────────────────────────────────
   if (step === 'select-rp') {
     return (
       <div className="page-container">
-        <div style={{ background: 'var(--color-navy)', padding: '52px 24px 24px', marginBottom: 24 }}>
-          <button
-            onClick={() => router.back()}
-            style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: 14, marginBottom: 12 }}
-          >
-            ← Back
-          </button>
-          <h1 style={{ color: 'white', fontSize: 20, fontWeight: 700 }}>Grant Access</h1>
-          <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13, marginTop: 4 }}>Step 1 of 3 — Choose an app</p>
-        </div>
-
-        <div style={{ padding: '0 16px' }}>
-          {loadingRPs ? (
-            <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}><div className="spinner" /></div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <PageHeader
+          title="Grant Access"
+          subtitle="Step 1 of 3 — Choose an app"
+          onBack={() => router.back()}
+        />
+        <div className="px-4">
+          {loadingRPs ? <Spinner /> : (
+            <div className="flex flex-col gap-2.5">
               {rps.map((rp) => (
                 <button
                   key={rp.id}
                   onClick={() => { setSelectedRp(rp); setSelectedScopes([]); setStep('select-scopes'); }}
-                  style={{
-                    background: 'white',
-                    border: '1.5px solid var(--color-border)',
-                    borderRadius: 16,
-                    padding: '16px 18px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 14,
-                    textAlign: 'left',
-                    cursor: 'pointer',
-                  }}
+                  className="bg-white border border-[var(--color-border)] rounded-2xl px-[18px] py-4 flex items-center gap-3.5 text-left cursor-pointer hover:shadow-md transition-shadow"
                 >
-                  <div
-                    style={{
-                      width: 44,
-                      height: 44,
-                      borderRadius: 12,
-                      background: 'var(--color-navy)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: 'white',
-                      fontSize: 18,
-                      fontWeight: 800,
-                      flexShrink: 0,
-                    }}
-                  >
+                  <div className="w-11 h-11 rounded-xl bg-[var(--color-navy)] flex items-center justify-center text-white text-[18px] font-extrabold shrink-0">
                     {rp.name.charAt(0)}
                   </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--color-text-1)', marginBottom: 2 }}>{rp.name}</div>
-                    <div style={{ fontSize: 12, color: 'var(--color-text-3)' }}>{rp.domain}</div>
+                  <div className="flex-1">
+                    <p className="text-[15px] font-bold text-[var(--color-text-1)] mb-0.5">{rp.name}</p>
+                    <p className="text-[12px] text-[var(--color-text-3)]">{rp.domain}</p>
                   </div>
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                     <path d="M6 4L10 8L6 12" stroke="var(--color-text-3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -156,63 +96,50 @@ export default function GrantPage() {
     );
   }
 
-  // ── Step 2: Select scopes ──
+  // ── Step 2: Select scopes ──────────────────────────────────────────────────
   if (step === 'select-scopes') {
-    const allowedScopes = selectedRp?.allowedScopes ?? [];
+    const allowed = selectedRp?.allowedScopes ?? [];
     return (
-      <div className="page-container" style={{ paddingBottom: 100 }}>
-        <div style={{ background: 'var(--color-navy)', padding: '52px 24px 24px', marginBottom: 24 }}>
-          <button
-            onClick={() => setStep('select-rp')}
-            style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: 14, marginBottom: 12 }}
-          >
-            ← Back
-          </button>
-          <h1 style={{ color: 'white', fontSize: 20, fontWeight: 700 }}>Review Access</h1>
-          <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13, marginTop: 4 }}>Step 2 of 3 — Choose what to share with {selectedRp?.name}</p>
-        </div>
-
-        <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div className="page-container pb-[100px]">
+        <PageHeader
+          title="Review Access"
+          subtitle={`Step 2 of 3 — Choose what to share with ${selectedRp?.name}`}
+          onBack={() => setStep('select-rp')}
+        />
+        <div className="px-4 flex flex-col gap-4">
           {SCOPE_GROUPS.map(({ group, icon, scopes }) => {
-            const available = scopes.filter((s) => allowedScopes.includes(s));
+            const available = scopes.filter((s) => allowed.includes(s));
             if (available.length === 0) return null;
             return (
-              <div key={group} className="card">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-                  <span style={{ fontSize: 18 }}>{icon}</span>
-                  <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--color-text-1)' }}>{group}</span>
+              <Card key={group}>
+                <div className="flex items-center gap-2 mb-3.5">
+                  <span className="text-[18px]">{icon}</span>
+                  <span className="font-bold text-[14px] text-[var(--color-text-1)]">{group}</span>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {available.map((scope) => {
-                    const checked = selectedScopes.includes(scope);
-                    return (
-                      <label
-                        key={scope}
-                        style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => toggleScope(scope)}
-                          style={{ width: 18, height: 18, accentColor: 'var(--color-navy)', cursor: 'pointer' }}
-                        />
-                        <div>
-                          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text-1)' }}>
-                            {SCOPE_LABELS[scope] ?? scope}
-                          </div>
-                          <div style={{ fontSize: 11, color: 'var(--color-text-3)' }}>{scope}</div>
-                        </div>
-                      </label>
-                    );
-                  })}
+                <div className="flex flex-col gap-2.5">
+                  {available.map((scope) => (
+                    <label key={scope} className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selectedScopes.includes(scope)}
+                        onChange={() => toggleScope(scope)}
+                        className="w-[18px] h-[18px] cursor-pointer accent-[var(--color-navy)]"
+                      />
+                      <div>
+                        <p className="text-[13px] font-semibold text-[var(--color-text-1)]">
+                          {SCOPE_LABELS[scope] ?? scope}
+                        </p>
+                        <p className="text-[11px] text-[var(--color-text-3)]">{scope}</p>
+                      </div>
+                    </label>
+                  ))}
                 </div>
-              </div>
+              </Card>
             );
           })}
 
           <Button
-            variant="primary"
-            fullWidth
+            variant="primary" fullWidth
             disabled={selectedScopes.length === 0}
             onClick={() => setStep('authenticate')}
           >
@@ -223,63 +150,38 @@ export default function GrantPage() {
     );
   }
 
-  // ── Step 3: Authenticate ──
+  // ── Step 3: Authenticate ───────────────────────────────────────────────────
   if (step === 'authenticate') {
     return (
       <div className="page-container">
-        <div style={{ background: 'var(--color-navy)', padding: '52px 24px 24px', marginBottom: 24 }}>
-          <button
-            onClick={() => setStep('select-scopes')}
-            style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: 14, marginBottom: 12 }}
-          >
-            ← Back
-          </button>
-          <h1 style={{ color: 'white', fontSize: 20, fontWeight: 700 }}>Authenticate</h1>
-          <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13, marginTop: 4 }}>Step 3 of 3 — Confirm with your PIN</p>
-        </div>
-
-        <div style={{ padding: '0 24px', maxWidth: 400, margin: '0 auto' }}>
-          <div className="card" style={{ textAlign: 'center', marginBottom: 24 }}>
-            <div style={{ fontSize: 40, marginBottom: 12 }}>🔐</div>
-            <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--color-text-1)', marginBottom: 8 }}>
+        <PageHeader
+          title="Authenticate"
+          subtitle="Step 3 of 3 — Confirm with your PIN"
+          onBack={() => setStep('select-scopes')}
+        />
+        <div className="px-6 max-w-[400px] mx-auto">
+          <Card className="text-center mb-6">
+            <p className="text-[40px] mb-3">🔐</p>
+            <h2 className="text-[16px] font-bold text-[var(--color-text-1)] mb-2">
               Granting {selectedScopes.length} scope{selectedScopes.length !== 1 ? 's' : ''} to {selectedRp?.name}
             </h2>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center', marginBottom: 4 }}>
+            <div className="flex flex-wrap gap-1.5 justify-center">
               {selectedScopes.map((s) => (
-                <span
-                  key={s}
-                  style={{
-                    background: 'var(--color-navy)',
-                    color: 'white',
-                    borderRadius: 20,
-                    padding: '3px 10px',
-                    fontSize: 11,
-                    fontWeight: 600,
-                  }}
-                >
-                  {SCOPE_LABELS[s] ?? s}
-                </span>
+                <Badge key={s} variant="navy">{SCOPE_LABELS[s] ?? s}</Badge>
               ))}
             </div>
-          </div>
+          </Card>
 
-          <div style={{ marginBottom: 20 }}>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--color-text-2)', marginBottom: 8, textAlign: 'center' }}>
-              Enter PIN
-            </label>
-            <input
-              type="password"
-              inputMode="numeric"
-              maxLength={4}
-              placeholder="••••"
-              value={pin}
-              onChange={(e) => { setPin(e.target.value); setPinError(''); }}
-              className="form-input"
+          <div className="mb-5">
+            <Label className="block text-center mb-2">Enter PIN</Label>
+            <Input
+              type="password" inputMode="numeric" maxLength={4} placeholder="••••"
+              value={pin} onChange={(e) => { setPin(e.target.value); setPinError(''); }}
               style={{ textAlign: 'center', fontSize: 26, letterSpacing: 10 }}
-              autoFocus
+              autoFocus error={!!pinError}
             />
-            {pinError && <div className="form-error" style={{ marginTop: 6 }}>{pinError}</div>}
-            <p style={{ fontSize: 11, color: 'var(--color-amber)', marginTop: 6, textAlign: 'center' }}>
+            {pinError && <p className="form-error mt-1.5">{pinError}</p>}
+            <p className="text-[11px] text-[var(--color-amber)] mt-1.5 text-center">
               ⚠ Demo placeholder — not real security. Enter 1234.
             </p>
           </div>
@@ -292,39 +194,19 @@ export default function GrantPage() {
     );
   }
 
-  // ── Step 4: Success ──
+  // ── Step 4: Success ────────────────────────────────────────────────────────
   return (
-    <div
-      style={{
-        minHeight: '100dvh',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 32,
-        textAlign: 'center',
-        background: 'var(--color-bg)',
-      }}
-    >
-      <div style={{ fontSize: 72, marginBottom: 24 }}>✅</div>
-      <h1 style={{ fontSize: 24, fontWeight: 800, color: 'var(--color-text-1)', marginBottom: 8 }}>Access Granted</h1>
-      <p style={{ fontSize: 15, color: 'var(--color-text-2)', marginBottom: 32, maxWidth: 280 }}>
+    <div className="min-h-dvh flex flex-col items-center justify-center px-8 text-center bg-[var(--color-bg)]">
+      <p className="text-[72px] mb-6">✅</p>
+      <h1 className="text-[24px] font-extrabold text-[var(--color-text-1)] mb-2">Access Granted</h1>
+      <p className="text-[15px] text-[var(--color-text-2)] mb-8 max-w-[280px]">
         {selectedRp?.name} now has access to your selected data. You can revoke this at any time.
       </p>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%', maxWidth: 320 }}>
-        <Button
-          variant="primary"
-          fullWidth
-          onClick={() => router.push(`/consents/${createdGrantId}`)}
-        >
+      <div className="flex flex-col gap-3 w-full max-w-[320px]">
+        <Button variant="primary"   fullWidth onClick={() => router.push(`/consents/${createdGrantId}`)}>
           View Consent
         </Button>
-        <Button
-          variant="secondary"
-          fullWidth
-          onClick={() => router.push('/consents')}
-        >
+        <Button variant="secondary" fullWidth onClick={() => router.push('/consents')}>
           Back to Consents
         </Button>
       </div>

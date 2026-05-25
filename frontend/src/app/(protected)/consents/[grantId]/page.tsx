@@ -1,39 +1,55 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useAuthState } from '@/lib/auth';
 import { useRealtime, type RealtimeMessage } from '@/lib/ws';
-import { api, ConsentGrant, SCOPE_LABELS } from '@/lib/api';
+import { api, type ConsentGrant, SCOPE_LABELS } from '@/lib/api';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import RPHeader from '@/components/RPHeader';
-import Button from '@/components/Button';
+import Spinner from '@/components/Spinner';
+
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function ScopeIcon({ scope }: { scope: string }) {
+  const icon = scope.startsWith('identity') ? '👤'
+    : scope.startsWith('address')  ? '🏠'
+    : scope.startsWith('payment')  ? '💳'
+    : '📞';
+  return (
+    <div className="w-7 h-7 rounded-lg bg-[var(--color-teal-lt)] flex items-center justify-center text-[14px] shrink-0">
+      {icon}
+    </div>
+  );
+}
 
 export default function ConsentDetailPage() {
-  const { user } = useAuthState();
-  const router = useRouter();
-  const params = useParams();
-  const grantId = params.grantId as string;
+  const { user }  = useAuthState();
+  const router    = useRouter();
+  const params    = useParams();
+  const grantId   = params.grantId as string;
 
-  const [grant, setGrant] = useState<ConsentGrant | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [grant,      setGrant]      = useState<ConsentGrant | null>(null);
+  const [loading,    setLoading]    = useState(true);
   const [showRevoke, setShowRevoke] = useState(false);
-  const [pin, setPin] = useState('');
-  const [revoking, setRevoking] = useState(false);
-  const [pinError, setPinError] = useState('');
-  const [toast, setToast] = useState('');
+  const [pin,        setPin]        = useState('');
+  const [revoking,   setRevoking]   = useState(false);
+  const [pinError,   setPinError]   = useState('');
+  const [toast,      setToast]      = useState('');
 
   useEffect(() => {
     if (!user) return;
-    api.consents
-      .get(user.id, grantId)
+    api.consents.get(user.id, grantId)
       .then(setGrant)
       .catch(() => router.replace('/consents'))
       .finally(() => setLoading(false));
   }, [user, grantId, router]);
 
-  // Real-time updates via the shared app WebSocket (F22/C6). Reflect revocation
-  // and expiry for this specific grant. Accept the legacy { event } shape too so
-  // a rolling deploy stays compatible.
   const onRealtime = useCallback((msg: RealtimeMessage) => {
     const affectedId = msg?.grant?.id ?? msg?.grantId;
     if (affectedId !== grantId) return;
@@ -46,13 +62,7 @@ export default function ConsentDetailPage() {
   useRealtime(onRealtime);
 
   async function handleRevoke() {
-    // SECURITY-PLACEHOLDER: see /consents/grant page — same caveat applies.
-    // The backend currently accepts DELETE /v1/consents/:id with only a normal
-    // access token; this PIN is purely cosmetic. Replace with X-PDV-Stepup.
-    if (pin !== '1234') {
-      setPinError('Incorrect PIN. (Demo placeholder: enter 1234.)');
-      return;
-    }
+    if (pin !== '1234') { setPinError('Incorrect PIN. (Demo placeholder: enter 1234.)'); return; }
     setPinError('');
     setRevoking(true);
     try {
@@ -70,94 +80,66 @@ export default function ConsentDetailPage() {
     }
   }
 
-  function formatDate(iso: string) {
-    return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-  }
-
-  if (loading) {
-    return (
-      <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div className="spinner" />
-      </div>
-    );
-  }
-  if (!grant) return null;
-
-  const rp = grant.rp;
+  if (loading) return <Spinner fullPage />;
+  if (!grant)  return null;
 
   return (
-    <div className="page-container" style={{ paddingBottom: 100 }}>
+    <div className="page-container pb-[100px]">
       {/* Back */}
-      <div style={{ padding: '52px 16px 0' }}>
+      <div className="pt-[52px] pb-0 px-4">
         <button
           onClick={() => router.back()}
-          style={{ background: 'none', border: 'none', color: 'var(--color-text-3)', cursor: 'pointer', fontSize: 14, marginBottom: 16 }}
+          className="bg-transparent border-0 text-[var(--color-text-3)] text-[14px] cursor-pointer mb-4 hover:text-[var(--color-text-2)] transition-colors"
         >
           ← Consents
         </button>
       </div>
 
-      {/* RP Header */}
-      {rp && <div style={{ padding: '0 16px' }}><RPHeader rp={rp} status={grant.status} /></div>}
+      <div className="px-4">
+        <RPHeader rp={grant.rp} status={grant.status} />
+      </div>
 
-      <div style={{ padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {/* Dates */}
-        <div className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+      <div className="px-4 pt-5 flex flex-col gap-4">
+        {/* Dates card */}
+        <Card>
+          <div className="flex justify-between">
             <div>
-              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--color-text-3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>Granted</div>
-              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text-1)' }}>{formatDate(grant.granted_at)}</div>
+              <p className="section-header mb-0.5">Granted</p>
+              <p className="text-[14px] font-semibold text-[var(--color-text-1)]">{formatDate(grant.granted_at)}</p>
             </div>
             {grant.expires_at && (
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--color-text-3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>Expires</div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text-1)' }}>{formatDate(grant.expires_at)}</div>
+              <div className="text-right">
+                <p className="section-header mb-0.5">Expires</p>
+                <p className="text-[14px] font-semibold text-[var(--color-text-1)]">{formatDate(grant.expires_at)}</p>
               </div>
             )}
           </div>
           {grant.revoked_at && (
-            <div>
-              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--color-text-3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>Revoked</div>
-              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-red)' }}>{formatDate(grant.revoked_at)}</div>
+            <div className="mt-3">
+              <p className="section-header mb-0.5">Revoked</p>
+              <p className="text-[14px] font-semibold text-[var(--color-red)]">{formatDate(grant.revoked_at)}</p>
             </div>
           )}
-        </div>
+        </Card>
 
-        {/* Scopes */}
-        <div className="card">
-          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--color-text-3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 14 }}>
-            Data access granted
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {/* Scopes card */}
+        <Card>
+          <p className="section-header mb-3.5">Data access granted</p>
+          <div className="flex flex-col gap-2.5">
             {grant.scopes.map((scope) => (
-              <div key={scope} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div
-                  style={{
-                    width: 28,
-                    height: 28,
-                    borderRadius: 8,
-                    background: 'var(--color-teal-lt)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: 14,
-                    flexShrink: 0,
-                  }}
-                >
-                  {scope.startsWith('identity') ? '👤' : scope.startsWith('address') ? '🏠' : scope.startsWith('payment') ? '💳' : '📞'}
-                </div>
+              <div key={scope} className="flex items-center gap-2.5">
+                <ScopeIcon scope={scope} />
                 <div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text-1)' }}>
+                  <p className="text-[13px] font-semibold text-[var(--color-text-1)]">
                     {SCOPE_LABELS[scope] ?? scope}
-                  </div>
-                  <div style={{ fontSize: 11, color: 'var(--color-text-3)' }}>{scope}</div>
+                  </p>
+                  <p className="text-[11px] text-[var(--color-text-3)]">{scope}</p>
                 </div>
               </div>
             ))}
           </div>
-        </div>
+        </Card>
 
-        {/* Revoke button */}
         {grant.status === 'ACTIVE' && (
           <Button variant="destructive" fullWidth onClick={() => setShowRevoke(true)}>
             Revoke Access
@@ -165,60 +147,49 @@ export default function ConsentDetailPage() {
         )}
 
         {grant.status !== 'ACTIVE' && (
-          <div style={{ textAlign: 'center', padding: 16, color: 'var(--color-text-3)', fontSize: 13 }}>
+          <p className="text-center py-4 text-[var(--color-text-3)] text-[13px]">
             This consent is {grant.status.toLowerCase()} and no longer active.
-          </div>
+          </p>
         )}
       </div>
 
       {/* Revoke bottom sheet */}
       {showRevoke && (
-        <div className="bottom-sheet-overlay" onClick={() => setShowRevoke(false)}>
-          <div
-            className="bottom-sheet"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
+        <div className="overlay" onClick={() => setShowRevoke(false)}>
+          <div className="bottom-sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-start mb-5">
               <div>
-                <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--color-text-1)', marginBottom: 4 }}>Confirm Revocation</h2>
-                <p style={{ fontSize: 13, color: 'var(--color-text-3)' }}>
-                  {rp?.name} will lose access within 5 seconds.
+                <h2 className="text-[18px] font-bold text-[var(--color-text-1)] mb-1">Confirm Revocation</h2>
+                <p className="text-[13px] text-[var(--color-text-3)]">
+                  {grant.rp?.name} will lose access within 5 seconds.
                 </p>
               </div>
               <button
                 onClick={() => setShowRevoke(false)}
-                style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--color-text-3)', lineHeight: 1 }}
+                className="bg-transparent border-0 text-[20px] text-[var(--color-text-3)] cursor-pointer leading-none"
               >
                 ×
               </button>
             </div>
 
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--color-text-2)', marginBottom: 8 }}>
-                Enter your PIN to confirm
-              </label>
-              <input
-                type="password"
-                inputMode="numeric"
-                maxLength={4}
-                placeholder="••••"
-                value={pin}
-                onChange={(e) => { setPin(e.target.value); setPinError(''); }}
-                className="form-input"
+            <div className="mb-4">
+              <Label className="block mb-2 text-center">Enter your PIN to confirm</Label>
+              <Input
+                type="password" inputMode="numeric" maxLength={4} placeholder="••••"
+                value={pin} onChange={(e) => { setPin(e.target.value); setPinError(''); }}
                 style={{ textAlign: 'center', fontSize: 22, letterSpacing: 8 }}
                 autoFocus
+                error={!!pinError}
               />
-              {pinError && <div className="form-error" style={{ marginTop: 6 }}>{pinError}</div>}
-              <p style={{ fontSize: 11, color: 'var(--color-amber)', marginTop: 6, textAlign: 'center' }}>
+              {pinError && <p className="form-error mt-1.5">{pinError}</p>}
+              <p className="text-[11px] text-[var(--color-amber)] mt-1.5 text-center">
                 ⚠ Demo placeholder — not real security. Enter 1234.
               </p>
             </div>
 
-            <div style={{ display: 'flex', gap: 12 }}>
-              <Button variant="secondary" fullWidth onClick={() => setShowRevoke(false)}>Cancel</Button>
-              <Button variant="destructive" fullWidth loading={revoking} onClick={handleRevoke}>
-                Revoke
-              </Button>
+            <div className="flex gap-3">
+              <Button variant="secondary"   fullWidth onClick={() => setShowRevoke(false)}>Cancel</Button>
+              <Button variant="destructive" fullWidth loading={revoking} onClick={handleRevoke}>Revoke</Button>
             </div>
           </div>
         </div>

@@ -1,30 +1,38 @@
-/* Personal Data Vault — Design Tokens & Global Styles */
-/* Implements the exact design system from the SDD */
+@import "tailwindcss";
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+/* ── Design tokens (mirrored in src/styles/theme.ts) ──────────────────────── */
+/* Defining in @theme makes every token available as a Tailwind utility AND   */
+/* as a CSS variable automatically (e.g. bg-navy, var(--color-navy)).         */
+@theme {
+  --color-navy:     #1B3A5C;
+  --color-blue:     #196699;
+  --color-steel:    #4A90C4;
+  --color-teal:     #0F6A5B;
+  --color-teal-lt:  #E0F4EF;
+  --color-amber:    #B07D18;
+  --color-amber-lt: #FEF3DC;
+  --color-red:      #A32D2D;
+  --color-red-lt:   #FDEAEA;
+  --color-surface:  #FFFFFF;
+  --color-bg:       #F5F6F8;
+  --color-border:   #DDDEE9;
+  --color-text-1:   #1A1A2E;
+  --color-text-2:   #5A6178;
+  --color-text-3:   #93A0AB;
 
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+  --radius-sm:   10px;
+  --radius-md:   14px;
+  --radius-lg:   20px;
+  --radius-pill: 9999px;
+
+  --spacing-nav:        60px;
+  --spacing-bottom-nav: 64px;
+}
+
+/* Spacing aliases (not in Tailwind theme — used in CSS calc() only) */
 :root {
-  /* Colour Palette */
-  --color-navy:      #1B3A5C;
-  --color-blue:      #196699;
-  --color-steel:     #4A90C4;
-  --color-teal:      #0F6A5B;
-  --color-teal-lt:   #E0F4EF;
-  --color-amber:     #B07D18;
-  --color-amber-lt:  #FEF3DC;
-  --color-red:       #A32D2D;
-  --color-red-lt:    #FDEAEA;
-  --color-surface:   #FFFFFF;
-  --color-bg:        #F5F6F8;
-  --color-border:    #DDDEE9;
-  --color-text-1:    #1A1A2E;
-  --color-text-2:    #5A6178;
-  --color-text-3:    #93A0AB;
-
-  /* Typography */
-  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-
-  /* Spacing */
   --space-xs:  4px;
   --space-sm:  8px;
   --space-md:  12px;
@@ -32,24 +40,22 @@
   --space-xl:  24px;
   --space-xxl: 32px;
 
-  /* Border radius */
-  --radius-sm:   10px;
-  --radius-md:   14px;
-  --radius-lg:   20px;
-  --radius-pill: 9999px;
-
-  /* Nav height */
-  --nav-height: 60px;
-  --bottom-nav-height: 64px;
+  /* Kept for any legacy var() reference */
+  --font-family:        var(--font-sans);
+  --nav-height:         var(--spacing-nav);
+  --bottom-nav-height:  var(--spacing-bottom-nav);
 }
 
-/* ── Reset & Base ───────────────────────────────────────────────────────────── */
+/* ── Google Fonts ─────────────────────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+
+/* ── Reset & Base ─────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 html { font-size: 16px; -webkit-text-size-adjust: 100%; }
 
 body {
-  font-family: var(--font-family);
+  font-family: var(--font-sans);
   font-size: 15px;
   line-height: 1.5;
   color: var(--color-text-1);
@@ -67,7 +73,7 @@ input, textarea, select {
   font-size: 15px;
 }
 
-/* ── Typography utilities ───────────────────────────────────────────────────── */
+/* ── Typography utilities ─────────────────────────────────────────────────── */
 .text-display { font-size: 28px; font-weight: 700; line-height: 34px; }
 .text-h2      { font-size: 22px; font-weight: 700; line-height: 28px; }
 .text-h3      { font-size: 17px; font-weight: 600; line-height: 22px; }
@@ -76,11 +82,7 @@ input, textarea, select {
 .text-caption { font-size: 11px; font-weight: 400; line-height: 16px; }
 .text-label   { font-size: 10px; font-weight: 700; line-height: 14px; letter-spacing: 0.5px; text-transform: uppercase; }
 
-.text-1 { color: var(--color-text-1); }
-.text-2 { color: var(--color-text-2); }
-.text-3 { color: var(--color-text-3); }
-
-/* ── Card ───────────────────────────────────────────────────────────────────── */
+/* ── Card ─────────────────────────────────────────────────────────────────── */
 .card {
   background: var(--color-surface);
   border-radius: var(--radius-md);
@@ -89,7 +91,7 @@ input, textarea, select {
   padding: var(--space-lg);
 }
 
-/* ── Page container ─────────────────────────────────────────────────────────── */
+/* ── Page container ───────────────────────────────────────────────────────── */
 .page-container {
   max-width: 600px;
   margin: 0 auto;
@@ -97,7 +99,7 @@ input, textarea, select {
   padding-bottom: calc(var(--bottom-nav-height) + var(--space-xl));
 }
 
-/* ── Form styles ────────────────────────────────────────────────────────────── */
+/* ── Form styles ──────────────────────────────────────────────────────────── */
 .form-group { display: flex; flex-direction: column; gap: var(--space-xs); }
 
 .form-label {
@@ -116,10 +118,11 @@ input, textarea, select {
   background: var(--color-surface);
   outline: none;
   transition: border-color 0.15s ease;
+  width: 100%;
 }
 
-.form-input:focus { border-color: var(--color-blue); }
-.form-input.error { border-color: var(--color-red); background: var(--color-red-lt); }
+.form-input:focus  { border-color: var(--color-blue); }
+.form-input.error  { border-color: var(--color-red); background: var(--color-red-lt); }
 .form-input::placeholder { color: var(--color-text-3); }
 
 .form-error {
@@ -128,14 +131,14 @@ input, textarea, select {
   margin-top: 2px;
 }
 
-/* ── Divider ────────────────────────────────────────────────────────────────── */
+/* ── Divider ──────────────────────────────────────────────────────────────── */
 .divider {
   height: 1px;
   background: var(--color-border);
   margin: var(--space-xl) 0;
 }
 
-/* ── Toast (simple notification) ────────────────────────────────────────────── */
+/* ── Toast ────────────────────────────────────────────────────────────────── */
 .toast {
   position: fixed;
   bottom: calc(var(--bottom-nav-height) + var(--space-lg));
@@ -148,6 +151,7 @@ input, textarea, select {
   font-size: 14px;
   z-index: 1000;
   animation: fadeInUp 0.2s ease;
+  white-space: nowrap;
 }
 
 @keyframes fadeInUp {
@@ -155,7 +159,7 @@ input, textarea, select {
   to   { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 
-/* ── Spinner ────────────────────────────────────────────────────────────────── */
+/* ── Spinner ──────────────────────────────────────────────────────────────── */
 .spinner {
   display: inline-block;
   width: 18px;
@@ -166,9 +170,14 @@ input, textarea, select {
   animation: spin 0.7s linear infinite;
 }
 
+.spinner-dark {
+  border-color: rgba(27,58,92,0.2);
+  border-top-color: var(--color-navy);
+}
+
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ── Empty state ────────────────────────────────────────────────────────────── */
+/* ── Empty state ──────────────────────────────────────────────────────────── */
 .empty-state {
   display: flex;
   flex-direction: column;
@@ -179,9 +188,7 @@ input, textarea, select {
   gap: var(--space-md);
 }
 
-.empty-state .icon { font-size: 48px; }
-
-/* ── Section header ─────────────────────────────────────────────────────────── */
+/* ── Section header ───────────────────────────────────────────────────────── */
 .section-header {
   font-size: 11px;
   font-weight: 700;
@@ -191,10 +198,7 @@ input, textarea, select {
   margin-bottom: var(--space-md);
 }
 
-/* ── Scrollable list ────────────────────────────────────────────────────────── */
-.list { display: flex; flex-direction: column; gap: var(--space-md); }
-
-/* ── Bottom sheet overlay ───────────────────────────────────────────────────── */
+/* ── Bottom sheet ─────────────────────────────────────────────────────────── */
 .overlay {
   position: fixed;
   inset: 0;

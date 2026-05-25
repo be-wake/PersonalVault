@@ -1,47 +1,69 @@
 'use client';
 
-import { useEffect, useState, FormEvent } from 'react';
-import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { useAuthState } from '@/lib/auth';
-import { api, IdentityData } from '@/lib/api';
+import { useRealtime, type RealtimeMessage } from '@/lib/ws';
+import { api, type IdentityData } from '@/lib/api';
+import PageHeader from '@/components/PageHeader';
+import FormField from '@/components/FormField';
 import FieldRow from '@/components/FieldRow';
-import Button from '@/components/Button';
+import Spinner from '@/components/Spinner';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+
+const FIELDS = [
+  { id: 'first_name',     label: 'First name',     type: 'text',  placeholder: 'Jane' },
+  { id: 'last_name',      label: 'Last name',       type: 'text',  placeholder: 'Smith' },
+  { id: 'email_primary',  label: 'Primary email',   type: 'email', placeholder: 'jane@example.com' },
+  { id: 'date_of_birth',  label: 'Date of birth',   type: 'date',  placeholder: '' },
+  { id: 'id_type',        label: 'Gov ID type',     type: 'text',  placeholder: 'PASSPORT / AADHAAR / SSN' },
+  { id: 'id_number',      label: 'Gov ID number',   type: 'text',  placeholder: '•••••••••' },
+] as const;
+
+type FormKey = typeof FIELDS[number]['id'];
 
 export default function IdentityPage() {
   const { user } = useAuthState();
-  const router = useRouter();
-  const [data, setData] = useState<IdentityData | null>(null);
+  const [data,    setData]    = useState<IdentityData | null>(null);
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({
-    first_name: '',
-    last_name: '',
-    email_primary: '',
-    date_of_birth: '',
-    id_type: '',
-    id_number: '',
+  const [saving,  setSaving]  = useState(false);
+  const [toast,   setToast]   = useState('');
+  const [form,    setForm]    = useState<Record<FormKey, string>>({
+    first_name: '', last_name: '', email_primary: '',
+    date_of_birth: '', id_type: '', id_number: '',
   });
-  const [toast, setToast] = useState('');
+
+  function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(''), 2500); }
 
   useEffect(() => {
     if (!user) return;
-    api.vault
-      .getIdentity(user.id)
+    api.vault.getIdentity(user.id)
       .then((d) => {
         setData(d);
         setForm({
-          first_name: d.first_name ?? '',
-          last_name: d.last_name ?? '',
-          email_primary: d.email_primary ?? '',
-          date_of_birth: d.date_of_birth ?? '',
-          id_type: d.id_type ?? '',
-          id_number: d.id_number ?? '',
+          first_name: d.first_name ?? '', last_name: d.last_name ?? '',
+          email_primary: d.email_primary ?? '', date_of_birth: d.date_of_birth ?? '',
+          id_type: d.id_type ?? '', id_number: d.id_number ?? '',
         });
       })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [user]);
+
+  // Real-time sync from other tabs/devices — skip if the user is mid-edit.
+  const onRealtime = useCallback((msg: RealtimeMessage) => {
+    if (msg.type !== 'VAULT_UPDATED' || msg.resource !== 'identity') return;
+    if (editing) return;
+    const d = msg.data as IdentityData;
+    setData(d);
+    setForm({
+      first_name: d.first_name ?? '', last_name: d.last_name ?? '',
+      email_primary: d.email_primary ?? '', date_of_birth: d.date_of_birth ?? '',
+      id_type: d.id_type ?? '', id_number: d.id_number ?? '',
+    });
+  }, [editing]);
+  useRealtime(onRealtime);
 
   async function handleSave(e: FormEvent) {
     e.preventDefault();
@@ -51,11 +73,9 @@ export default function IdentityPage() {
       const updated = await api.vault.updateIdentity(user.id, form);
       setData(updated);
       setEditing(false);
-      setToast('Identity saved');
-      setTimeout(() => setToast(''), 2500);
+      showToast('Identity saved');
     } catch {
-      setToast('Save failed');
-      setTimeout(() => setToast(''), 2500);
+      showToast('Save failed');
     } finally {
       setSaving(false);
     }
@@ -63,68 +83,32 @@ export default function IdentityPage() {
 
   return (
     <div className="page-container">
-      <div style={{ background: 'var(--color-navy)', padding: '52px 24px 24px', marginBottom: 24 }}>
-        <button
-          onClick={() => router.back()}
-          style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: 14, marginBottom: 12 }}
-        >
-          ← Back
-        </button>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontSize: 28 }}>👤</span>
-          <div>
-            <h1 style={{ color: 'white', fontSize: 20, fontWeight: 700 }}>Identity</h1>
-            <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13 }}>Name, email, DOB, gov ID</p>
-          </div>
-        </div>
-      </div>
+      <PageHeader title="Identity" subtitle="Name, email, DOB, gov ID" icon="👤" />
 
-      {loading ? (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}><div className="spinner" /></div>
-      ) : editing ? (
-        <form onSubmit={handleSave} style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {[
-            { id: 'first_name', label: 'First name', type: 'text', placeholder: 'Jane' },
-            { id: 'last_name', label: 'Last name', type: 'text', placeholder: 'Smith' },
-            { id: 'email_primary', label: 'Primary email', type: 'email', placeholder: 'jane@example.com' },
-            { id: 'date_of_birth', label: 'Date of birth', type: 'date', placeholder: '' },
-            { id: 'id_type', label: 'Gov ID type', type: 'text', placeholder: 'PASSPORT / AADHAAR / SSN' },
-            { id: 'id_number', label: 'Gov ID number', type: 'text', placeholder: '•••••••••' },
-          ].map(({ id, label, type, placeholder }) => (
-            <div key={id}>
-              <label htmlFor={id} style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--color-text-2)', marginBottom: 6 }}>
-                {label}
-              </label>
-              <input
-                id={id}
-                type={type}
-                placeholder={placeholder}
-                value={(form as any)[id]}
-                onChange={(e) => setForm((f) => ({ ...f, [id]: e.target.value }))}
-                className="form-input"
-              />
-            </div>
+      {loading ? <Spinner /> : editing ? (
+        <form onSubmit={handleSave} className="flex flex-col gap-4 px-4">
+          {FIELDS.map(({ id, label, type, placeholder }) => (
+            <FormField
+              key={id} id={id} label={label} type={type} placeholder={placeholder}
+              value={form[id]}
+              onChange={(v) => setForm((f) => ({ ...f, [id]: v }))}
+            />
           ))}
-          <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
+          <div className="flex gap-3 mt-2">
             <Button type="button" variant="secondary" fullWidth onClick={() => setEditing(false)}>Cancel</Button>
-            <Button type="submit" variant="primary" fullWidth loading={saving}>Save</Button>
+            <Button type="submit" variant="primary"   fullWidth loading={saving}>Save</Button>
           </div>
         </form>
       ) : (
-        <div style={{ padding: '0 16px' }}>
-          <div className="card" style={{ marginBottom: 16 }}>
-            <FieldRow label="First name" value={data?.first_name ?? '—'} mask="NONE" />
-            <div style={{ height: 1, background: 'var(--color-border)', margin: '12px 0' }} />
-            <FieldRow label="Last name" value={data?.last_name ?? '—'} mask="NONE" />
-            <div style={{ height: 1, background: 'var(--color-border)', margin: '12px 0' }} />
-            <FieldRow label="Primary email" value={data?.email_primary ?? '—'} mask="PARTIAL" />
-            <div style={{ height: 1, background: 'var(--color-border)', margin: '12px 0' }} />
-            <FieldRow label="Date of birth" value={data?.date_of_birth ?? '—'} mask="PARTIAL" />
-            <div style={{ height: 1, background: 'var(--color-border)', margin: '12px 0' }} />
-            <FieldRow label="Gov ID type" value={data?.id_type ?? '—'} mask="NONE" />
-            <div style={{ height: 1, background: 'var(--color-border)', margin: '12px 0' }} />
-            <FieldRow label="Gov ID number" value={data?.id_number ?? '—'} mask="FULL" />
-          </div>
+        <div className="px-4">
+          <Card className="mb-4">
+            <FieldRow label="First name"    value={data?.first_name}    mask="NONE" />
+            <FieldRow label="Last name"     value={data?.last_name}     mask="NONE"    divider />
+            <FieldRow label="Primary email" value={data?.email_primary} mask="PARTIAL" divider />
+            <FieldRow label="Date of birth" value={data?.date_of_birth} mask="PARTIAL" divider />
+            <FieldRow label="Gov ID type"   value={data?.id_type}       mask="NONE"    divider />
+            <FieldRow label="Gov ID number" value={data?.id_number}     mask="FULL"    divider />
+          </Card>
           <Button variant="secondary" fullWidth onClick={() => setEditing(true)}>Edit Identity</Button>
         </div>
       )}

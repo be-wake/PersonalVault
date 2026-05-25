@@ -1,40 +1,59 @@
 'use client';
 
-import { useEffect, useState, FormEvent } from 'react';
-import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { useAuthState } from '@/lib/auth';
-import { api, AddressData } from '@/lib/api';
+import { useRealtime, type RealtimeMessage } from '@/lib/ws';
+import { api, type AddressData } from '@/lib/api';
+import PageHeader from '@/components/PageHeader';
+import FormField from '@/components/FormField';
 import FieldRow from '@/components/FieldRow';
-import Button from '@/components/Button';
+import Spinner from '@/components/Spinner';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+
+const FIELDS = [
+  { id: 'line1',   label: 'Address line 1',  placeholder: '123 Main St' },
+  { id: 'line2',   label: 'Address line 2',  placeholder: 'Apt 4B (optional)' },
+  { id: 'city',    label: 'City',            placeholder: 'Mumbai' },
+  { id: 'state',   label: 'State / Region',  placeholder: 'Maharashtra' },
+  { id: 'postal',  label: 'Postal code',     placeholder: '400001' },
+  { id: 'country', label: 'Country',         placeholder: 'IN' },
+] as const;
+
+type FormKey = typeof FIELDS[number]['id'];
 
 export default function AddressPage() {
   const { user } = useAuthState();
-  const router = useRouter();
-  const [data, setData] = useState<AddressData | null>(null);
+  const [data,    setData]    = useState<AddressData | null>(null);
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ line1: '', line2: '', city: '', state: '', postal: '', country: '' });
-  const [toast, setToast] = useState('');
+  const [saving,  setSaving]  = useState(false);
+  const [toast,   setToast]   = useState('');
+  const [form,    setForm]    = useState<Record<FormKey, string>>({
+    line1: '', line2: '', city: '', state: '', postal: '', country: '',
+  });
+
+  function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(''), 2500); }
 
   useEffect(() => {
     if (!user) return;
-    api.vault
-      .getAddress(user.id)
+    api.vault.getAddress(user.id)
       .then((d) => {
         setData(d);
-        setForm({
-          line1: d.line1 ?? '',
-          line2: d.line2 ?? '',
-          city: d.city ?? '',
-          state: d.state ?? '',
-          postal: d.postal ?? '',
-          country: d.country ?? '',
-        });
+        setForm({ line1: d.line1 ?? '', line2: d.line2 ?? '', city: d.city ?? '', state: d.state ?? '', postal: d.postal ?? '', country: d.country ?? '' });
       })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [user]);
+
+  const onRealtime = useCallback((msg: RealtimeMessage) => {
+    if (msg.type !== 'VAULT_UPDATED' || msg.resource !== 'address') return;
+    if (editing) return;
+    const d = msg.data as AddressData;
+    setData(d);
+    setForm({ line1: d.line1 ?? '', line2: d.line2 ?? '', city: d.city ?? '', state: d.state ?? '', postal: d.postal ?? '', country: d.country ?? '' });
+  }, [editing]);
+  useRealtime(onRealtime);
 
   async function handleSave(e: FormEvent) {
     e.preventDefault();
@@ -44,11 +63,9 @@ export default function AddressPage() {
       const updated = await api.vault.updateAddress(user.id, form);
       setData(updated);
       setEditing(false);
-      setToast('Address saved');
-      setTimeout(() => setToast(''), 2500);
+      showToast('Address saved');
     } catch {
-      setToast('Save failed');
-      setTimeout(() => setToast(''), 2500);
+      showToast('Save failed');
     } finally {
       setSaving(false);
     }
@@ -56,66 +73,32 @@ export default function AddressPage() {
 
   return (
     <div className="page-container">
-      <div style={{ background: 'var(--color-navy)', padding: '52px 24px 24px', marginBottom: 24 }}>
-        <button
-          onClick={() => router.back()}
-          style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: 14, marginBottom: 12 }}
-        >
-          ← Back
-        </button>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontSize: 28 }}>🏠</span>
-          <div>
-            <h1 style={{ color: 'white', fontSize: 20, fontWeight: 700 }}>Address</h1>
-            <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13 }}>Current & address history</p>
-          </div>
-        </div>
-      </div>
+      <PageHeader title="Address" subtitle="Current & address history" icon="🏠" />
 
-      {loading ? (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}><div className="spinner" /></div>
-      ) : editing ? (
-        <form onSubmit={handleSave} style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {[
-            { id: 'line1', label: 'Address line 1', placeholder: '123 Main St' },
-            { id: 'line2', label: 'Address line 2', placeholder: 'Apt 4B (optional)' },
-            { id: 'city', label: 'City', placeholder: 'Mumbai' },
-            { id: 'state', label: 'State / Region', placeholder: 'Maharashtra' },
-            { id: 'postal', label: 'Postal code', placeholder: '400001' },
-            { id: 'country', label: 'Country', placeholder: 'IN' },
-          ].map(({ id, label, placeholder }) => (
-            <div key={id}>
-              <label htmlFor={id} style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--color-text-2)', marginBottom: 6 }}>{label}</label>
-              <input
-                id={id}
-                type="text"
-                placeholder={placeholder}
-                value={(form as any)[id]}
-                onChange={(e) => setForm((f) => ({ ...f, [id]: e.target.value }))}
-                className="form-input"
-              />
-            </div>
+      {loading ? <Spinner /> : editing ? (
+        <form onSubmit={handleSave} className="flex flex-col gap-4 px-4">
+          {FIELDS.map(({ id, label, placeholder }) => (
+            <FormField
+              key={id} id={id} label={label} placeholder={placeholder}
+              value={form[id]}
+              onChange={(v) => setForm((f) => ({ ...f, [id]: v }))}
+            />
           ))}
-          <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
+          <div className="flex gap-3 mt-2">
             <Button type="button" variant="secondary" fullWidth onClick={() => setEditing(false)}>Cancel</Button>
-            <Button type="submit" variant="primary" fullWidth loading={saving}>Save</Button>
+            <Button type="submit" variant="primary"   fullWidth loading={saving}>Save</Button>
           </div>
         </form>
       ) : (
-        <div style={{ padding: '0 16px' }}>
-          <div className="card" style={{ marginBottom: 16 }}>
-            <FieldRow label="Line 1" value={data?.line1 ?? '—'} mask="NONE" />
-            <div style={{ height: 1, background: 'var(--color-border)', margin: '12px 0' }} />
-            <FieldRow label="Line 2" value={data?.line2 ?? '—'} mask="NONE" />
-            <div style={{ height: 1, background: 'var(--color-border)', margin: '12px 0' }} />
-            <FieldRow label="City" value={data?.city ?? '—'} mask="NONE" />
-            <div style={{ height: 1, background: 'var(--color-border)', margin: '12px 0' }} />
-            <FieldRow label="State" value={data?.state ?? '—'} mask="NONE" />
-            <div style={{ height: 1, background: 'var(--color-border)', margin: '12px 0' }} />
-            <FieldRow label="Postal code" value={data?.postal ?? '—'} mask="PARTIAL" />
-            <div style={{ height: 1, background: 'var(--color-border)', margin: '12px 0' }} />
-            <FieldRow label="Country" value={data?.country ?? '—'} mask="NONE" />
-          </div>
+        <div className="px-4">
+          <Card className="mb-4">
+            <FieldRow label="Line 1"      value={data?.line1}   mask="NONE" />
+            <FieldRow label="Line 2"      value={data?.line2}   mask="NONE"    divider />
+            <FieldRow label="City"        value={data?.city}    mask="NONE"    divider />
+            <FieldRow label="State"       value={data?.state}   mask="NONE"    divider />
+            <FieldRow label="Postal code" value={data?.postal}  mask="PARTIAL" divider />
+            <FieldRow label="Country"     value={data?.country} mask="NONE"    divider />
+          </Card>
           <Button variant="secondary" fullWidth onClick={() => setEditing(true)}>Edit Address</Button>
         </div>
       )}

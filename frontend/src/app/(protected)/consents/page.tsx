@@ -4,17 +4,25 @@ import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthState } from '@/lib/auth';
 import { useRealtime, type RealtimeMessage } from '@/lib/ws';
-import { api, ConsentGrant } from '@/lib/api';
+import { api, type ConsentGrant } from '@/lib/api';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import ConsentCard from '@/components/ConsentCard';
+import Spinner from '@/components/Spinner';
 
 type Filter = 'ALL' | 'ACTIVE' | 'REVOKED' | 'EXPIRED';
+const FILTERS: Filter[] = ['ALL', 'ACTIVE', 'REVOKED', 'EXPIRED'];
+
+const FILTER_VARIANT: Record<string, 'active' | 'revoked' | 'expired'> = {
+  ACTIVE: 'active', REVOKED: 'revoked', EXPIRED: 'expired',
+};
 
 export default function ConsentsPage() {
-  const { user } = useAuthState();
-  const router = useRouter();
-  const [grants, setGrants] = useState<ConsentGrant[]>([]);
+  const { user }  = useAuthState();
+  const router    = useRouter();
+  const [grants,  setGrants]  = useState<ConsentGrant[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<Filter>('ALL');
+  const [filter,  setFilter]  = useState<Filter>('ALL');
 
   const reload = useCallback(() => {
     if (!user) return;
@@ -26,107 +34,76 @@ export default function ConsentsPage() {
   // Refresh whenever a consent event fires.
   const onRealtime = useCallback((msg: RealtimeMessage) => {
     if (msg?.type === 'CONNECTED') return;
-    if (msg?.type?.startsWith('CONSENT_') || msg?.event?.startsWith('consent.')) {
-      reload();
-    }
+    if (msg?.type?.startsWith('CONSENT_') || msg?.event?.startsWith('consent.')) reload();
   }, [reload]);
   useRealtime(onRealtime);
 
   const filtered = filter === 'ALL' ? grants : grants.filter((g) => g.status === filter);
 
-  const FILTERS: Filter[] = ['ALL', 'ACTIVE', 'REVOKED', 'EXPIRED'];
-
   return (
     <div className="page-container">
       {/* Header */}
-      <div style={{ background: 'var(--color-navy)', padding: '52px 24px 24px', marginBottom: 0 }}>
-        <h1 style={{ color: 'white', fontSize: 22, fontWeight: 800, marginBottom: 4 }}>Consents</h1>
-        <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13 }}>Manage who can access your data</p>
+      <div className="bg-[var(--color-navy)] -mx-4 px-6 pt-[52px] pb-6 mb-0">
+        <h1 className="text-white text-[22px] font-extrabold mb-1">Consents</h1>
+        <p className="text-white/60 text-[13px]">Manage who can access your data</p>
       </div>
 
       {/* Filter tabs */}
-      <div
-        style={{
-          display: 'flex',
-          gap: 8,
-          padding: '16px 16px 0',
-          overflowX: 'auto',
-          background: 'white',
-          borderBottom: '1px solid var(--color-border)',
-        }}
-      >
-        {FILTERS.map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            style={{
-              padding: '8px 16px',
-              borderRadius: 20,
-              border: 'none',
-              background: filter === f ? 'var(--color-navy)' : 'var(--color-bg)',
-              color: filter === f ? 'white' : 'var(--color-text-2)',
-              fontWeight: filter === f ? 700 : 500,
-              fontSize: 13,
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-              marginBottom: 12,
-            }}
-          >
-            {f}
-            {f !== 'ALL' && (
-              <span
-                style={{
-                  marginLeft: 6,
-                  background: filter === f ? 'rgba(255,255,255,0.25)' : 'var(--color-border)',
-                  borderRadius: 10,
-                  padding: '1px 6px',
-                  fontSize: 11,
-                }}
-              >
-                {grants.filter((g) => g.status === f).length}
-              </span>
-            )}
-          </button>
-        ))}
+      <div className="flex gap-2 px-4 pt-4 pb-0 overflow-x-auto bg-white border-b border-[var(--color-border)]">
+        {FILTERS.map((f) => {
+          const active = filter === f;
+          return (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-full border-0 text-[13px] cursor-pointer whitespace-nowrap mb-3 transition-colors"
+              style={{
+                background: active ? 'var(--color-navy)' : 'var(--color-bg)',
+                color:      active ? 'white'            : 'var(--color-text-2)',
+                fontWeight: active ? 700 : 500,
+              }}
+            >
+              {f}
+              {f !== 'ALL' && (
+                <Badge
+                  variant={active ? 'navy' : (FILTER_VARIANT[f] ?? 'active')}
+                  className="text-[11px]"
+                >
+                  {grants.filter((g) => g.status === f).length}
+                </Badge>
+              )}
+            </button>
+          );
+        })}
       </div>
 
-      {/* Grant new button */}
-      <div style={{ padding: '16px 16px 8px' }}>
-        <button
+      {/* Grant new */}
+      <div className="px-4 pt-4 pb-2">
+        <Button
+          variant="ghost"
+          fullWidth
           onClick={() => router.push('/consents/grant')}
-          style={{
-            width: '100%',
-            height: 48,
-            borderRadius: 12,
-            border: '2px dashed var(--color-blue)',
-            background: 'rgba(25, 102, 153, 0.06)',
-            color: 'var(--color-blue)',
-            fontWeight: 700,
-            fontSize: 14,
-            cursor: 'pointer',
-          }}
+          className="h-12 border-2 border-dashed border-[var(--color-blue)] bg-[rgba(25,102,153,0.06)] text-[var(--color-blue)] font-bold"
         >
           + Grant new access
-        </button>
+        </Button>
       </div>
 
       {/* List */}
-      <div style={{ padding: '8px 16px' }}>
-        {loading ? (
-          <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}><div className="spinner" /></div>
-        ) : filtered.length === 0 ? (
+      <div className="px-4 py-2">
+        {loading ? <Spinner /> : filtered.length === 0 ? (
           <div className="empty-state">
-            <p style={{ fontSize: 32, marginBottom: 8 }}>📋</p>
-            <p style={{ fontWeight: 600, color: 'var(--color-text-2)', marginBottom: 4 }}>No {filter !== 'ALL' ? filter.toLowerCase() : ''} consents</p>
-            <p style={{ fontSize: 13, color: 'var(--color-text-3)' }}>
+            <p className="text-[32px] mb-2">📋</p>
+            <p className="font-semibold text-[var(--color-text-2)] mb-1">
+              No {filter !== 'ALL' ? filter.toLowerCase() : ''} consents
+            </p>
+            <p className="text-[13px] text-[var(--color-text-3)]">
               {filter === 'ALL' ? 'Grant access to apps you trust' : `No ${filter.toLowerCase()} consents found`}
             </p>
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {filtered.map((grant) => (
-              <ConsentCard key={grant.id} grant={grant} />
-            ))}
+          <div className="flex flex-col gap-2.5">
+            {filtered.map((grant) => <ConsentCard key={grant.id} grant={grant} />)}
           </div>
         )}
       </div>

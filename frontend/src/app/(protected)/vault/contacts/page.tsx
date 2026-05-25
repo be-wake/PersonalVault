@@ -1,34 +1,34 @@
 'use client';
 
-import { useEffect, useState, FormEvent } from 'react';
-import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { useAuthState } from '@/lib/auth';
-import { api, ContactsData } from '@/lib/api';
+import { useRealtime, type RealtimeMessage } from '@/lib/ws';
+import { api, type ContactsData } from '@/lib/api';
+import PageHeader from '@/components/PageHeader';
+import FormField from '@/components/FormField';
 import FieldRow from '@/components/FieldRow';
-import Button from '@/components/Button';
+import Spinner from '@/components/Spinner';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
 
 export default function ContactsPage() {
   const { user } = useAuthState();
-  const router = useRouter();
-  const [data, setData] = useState<ContactsData | null>(null);
+  const [data,    setData]    = useState<ContactsData | null>(null);
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  // F8 — social / secondary contact handles
-  const [form, setForm] = useState({
-    phone_primary:   '',
-    phone_type:      'mobile',
-    email_secondary: '',
-    linkedin_url:    '',
-    twitter_handle:  '',
-    website_url:     '',
+  const [saving,  setSaving]  = useState(false);
+  const [toast,   setToast]   = useState('');
+  const [form,    setForm]    = useState({
+    phone_primary: '', phone_type: 'mobile',
+    email_secondary: '', linkedin_url: '', twitter_handle: '', website_url: '',
   });
-  const [toast, setToast] = useState('');
+
+  function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(''), 2500); }
 
   useEffect(() => {
     if (!user) return;
-    api.vault
-      .getContacts(user.id)
+    api.vault.getContacts(user.id)
       .then((d) => {
         setData(d);
         setForm({
@@ -44,6 +44,19 @@ export default function ContactsPage() {
       .finally(() => setLoading(false));
   }, [user]);
 
+  const onRealtime = useCallback((msg: RealtimeMessage) => {
+    if (msg.type !== 'VAULT_UPDATED' || msg.resource !== 'contacts') return;
+    if (editing) return;
+    const d = msg.data as ContactsData;
+    setData(d);
+    setForm({
+      phone_primary: d.phone_primary ?? '', phone_type: d.phone_type ?? 'mobile',
+      email_secondary: d.email_secondary ?? '', linkedin_url: d.linkedin_url ?? '',
+      twitter_handle: d.twitter_handle ?? '', website_url: d.website_url ?? '',
+    });
+  }, [editing]);
+  useRealtime(onRealtime);
+
   async function handleSave(e: FormEvent) {
     e.preventDefault();
     if (!user) return;
@@ -52,11 +65,9 @@ export default function ContactsPage() {
       const updated = await api.vault.updateContacts(user.id, form);
       setData(updated);
       setEditing(false);
-      setToast('Contacts saved');
-      setTimeout(() => setToast(''), 2500);
+      showToast('Contacts saved');
     } catch {
-      setToast('Save failed');
-      setTimeout(() => setToast(''), 2500);
+      showToast('Save failed');
     } finally {
       setSaving(false);
     }
@@ -64,47 +75,18 @@ export default function ContactsPage() {
 
   return (
     <div className="page-container">
-      <div style={{ background: 'var(--color-navy)', padding: '52px 24px 24px', marginBottom: 24 }}>
-        <button
-          onClick={() => router.back()}
-          style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: 14, marginBottom: 12 }}
-        >
-          ← Back
-        </button>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontSize: 28 }}>📞</span>
-          <div>
-            <h1 style={{ color: 'white', fontSize: 20, fontWeight: 700 }}>Contacts</h1>
-            <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13 }}>Phone, email & social handles</p>
-          </div>
-        </div>
-      </div>
+      <PageHeader title="Contacts" subtitle="Phone, email & social handles" icon="📞" />
 
-      {loading ? (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}><div className="spinner" /></div>
-      ) : editing ? (
-        <form onSubmit={handleSave} style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div>
-            <label htmlFor="phone_primary" style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--color-text-2)', marginBottom: 6 }}>
-              Primary phone
-            </label>
-            <input
-              id="phone_primary"
-              type="tel"
-              placeholder="+91 98765 43210"
-              value={form.phone_primary}
-              onChange={(e) => setForm((f) => ({ ...f, phone_primary: e.target.value }))}
-              className="form-input"
-            />
-          </div>
+      {loading ? <Spinner /> : editing ? (
+        <form onSubmit={handleSave} className="flex flex-col gap-4 px-4">
+          <FormField id="phone_primary" label="Primary phone" type="tel"
+            placeholder="+91 98765 43210" value={form.phone_primary}
+            onChange={(v) => setForm((f) => ({ ...f, phone_primary: v }))} />
 
-          <div>
-            <label htmlFor="phone_type" style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--color-text-2)', marginBottom: 6 }}>
-              Phone type
-            </label>
+          <div className="form-group">
+            <Label htmlFor="phone_type">Phone type</Label>
             <select
-              id="phone_type"
-              value={form.phone_type}
+              id="phone_type" value={form.phone_type}
               onChange={(e) => setForm((f) => ({ ...f, phone_type: e.target.value }))}
               className="form-input"
             >
@@ -114,102 +96,43 @@ export default function ContactsPage() {
             </select>
           </div>
 
-          <div>
-            <label htmlFor="email_secondary" style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--color-text-2)', marginBottom: 6 }}>
-              Secondary email (optional)
-            </label>
-            <input
-              id="email_secondary"
-              type="email"
-              placeholder="backup@example.com"
-              value={form.email_secondary}
-              onChange={(e) => setForm((f) => ({ ...f, email_secondary: e.target.value }))}
-              className="form-input"
-            />
-          </div>
+          <FormField id="email_secondary" label="Secondary email (optional)" type="email"
+            placeholder="backup@example.com" value={form.email_secondary}
+            onChange={(v) => setForm((f) => ({ ...f, email_secondary: v }))} />
 
-          {/* F8 — social handles */}
-          <div>
-            <label htmlFor="linkedin_url" style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--color-text-2)', marginBottom: 6 }}>
-              LinkedIn URL (optional)
-            </label>
-            <input
-              id="linkedin_url"
-              type="url"
-              placeholder="https://linkedin.com/in/yourprofile"
-              value={form.linkedin_url}
-              onChange={(e) => setForm((f) => ({ ...f, linkedin_url: e.target.value }))}
-              className="form-input"
-            />
-          </div>
+          <FormField id="linkedin_url" label="LinkedIn URL (optional)" type="url"
+            placeholder="https://linkedin.com/in/yourprofile" value={form.linkedin_url}
+            onChange={(v) => setForm((f) => ({ ...f, linkedin_url: v }))} />
 
-          <div>
-            <label htmlFor="twitter_handle" style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--color-text-2)', marginBottom: 6 }}>
-              X / Twitter handle (optional)
-            </label>
-            <input
-              id="twitter_handle"
-              type="text"
-              placeholder="@yourhandle"
-              value={form.twitter_handle}
-              onChange={(e) => setForm((f) => ({ ...f, twitter_handle: e.target.value }))}
-              className="form-input"
-            />
-          </div>
+          <FormField id="twitter_handle" label="X / Twitter handle (optional)"
+            placeholder="@yourhandle" value={form.twitter_handle}
+            onChange={(v) => setForm((f) => ({ ...f, twitter_handle: v }))} />
 
-          <div>
-            <label htmlFor="website_url" style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--color-text-2)', marginBottom: 6 }}>
-              Website (optional)
-            </label>
-            <input
-              id="website_url"
-              type="url"
-              placeholder="https://yourwebsite.com"
-              value={form.website_url}
-              onChange={(e) => setForm((f) => ({ ...f, website_url: e.target.value }))}
-              className="form-input"
-            />
-          </div>
+          <FormField id="website_url" label="Website (optional)" type="url"
+            placeholder="https://yourwebsite.com" value={form.website_url}
+            onChange={(v) => setForm((f) => ({ ...f, website_url: v }))} />
 
-          <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
+          <div className="flex gap-3 mt-2">
             <Button type="button" variant="secondary" fullWidth onClick={() => setEditing(false)}>Cancel</Button>
-            <Button type="submit" variant="primary" fullWidth loading={saving}>Save</Button>
+            <Button type="submit" variant="primary"   fullWidth loading={saving}>Save</Button>
           </div>
         </form>
       ) : (
-        <div style={{ padding: '0 16px' }}>
-          <div className="card" style={{ marginBottom: 16 }}>
-            <FieldRow label="Primary phone" value={data?.phone_primary ?? '—'} mask="PARTIAL" />
-            <div style={{ height: 1, background: 'var(--color-border)', margin: '12px 0' }} />
-            <FieldRow label="Phone type" value={data?.phone_type ?? '—'} mask="NONE" />
-            <div style={{ height: 1, background: 'var(--color-border)', margin: '12px 0' }} />
-            <FieldRow label="Secondary email" value={data?.email_secondary ?? '—'} mask="PARTIAL" />
-          </div>
+        <div className="px-4 flex flex-col gap-4">
+          <Card>
+            <FieldRow label="Primary phone"   value={data?.phone_primary}   mask="PARTIAL" />
+            <FieldRow label="Phone type"      value={data?.phone_type}      mask="NONE" divider />
+            <FieldRow label="Secondary email" value={data?.email_secondary} mask="PARTIAL" divider />
+          </Card>
 
-          {/* F8 — social handles card (only shown if any value is set) */}
           {(data?.linkedin_url || data?.twitter_handle || data?.website_url) && (
-            <div className="card" style={{ marginBottom: 16 }}>
-              {data?.linkedin_url && (
-                <>
-                  <FieldRow label="LinkedIn" value={data.linkedin_url} mask="NONE" />
-                  {(data?.twitter_handle || data?.website_url) && (
-                    <div style={{ height: 1, background: 'var(--color-border)', margin: '12px 0' }} />
-                  )}
-                </>
-              )}
-              {data?.twitter_handle && (
-                <>
-                  <FieldRow label="X / Twitter" value={data.twitter_handle} mask="NONE" />
-                  {data?.website_url && (
-                    <div style={{ height: 1, background: 'var(--color-border)', margin: '12px 0' }} />
-                  )}
-                </>
-              )}
-              {data?.website_url && (
-                <FieldRow label="Website" value={data.website_url} mask="NONE" />
-              )}
-            </div>
+            <Card>
+              {data?.linkedin_url   && <FieldRow label="LinkedIn"   value={data.linkedin_url}   mask="NONE" />}
+              {data?.twitter_handle && <FieldRow label="X / Twitter" value={data.twitter_handle} mask="NONE" divider={!!data.linkedin_url} />}
+              {data?.website_url    && <FieldRow label="Website"    value={data.website_url}    mask="NONE" divider={!!(data.linkedin_url || data.twitter_handle)} />}
+            </Card>
           )}
+
           <Button variant="secondary" fullWidth onClick={() => setEditing(true)}>Edit Contacts</Button>
         </div>
       )}

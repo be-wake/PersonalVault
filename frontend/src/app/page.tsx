@@ -1,163 +1,78 @@
 'use client';
 
-// E23 — removed unused Button import.
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthState } from '@/lib/auth';
 
+const FEATURES = [
+  { icon: '🔒', text: 'Zero-trust encryption' },
+  { icon: '✅', text: 'Consent-driven access' },
+  { icon: '⚡', text: 'Instant revocation' },
+];
+
 export default function LandingPage() {
   const router = useRouter();
-  // S1 — auth is now cookie-based; check session via AuthContext instead of localStorage.
   const { user, loading } = useAuthState();
 
   useEffect(() => {
-    if (!loading && user) {
-      router.replace('/dashboard');
-    }
+    if (!loading && user) router.replace('/dashboard');
   }, [loading, user, router]);
 
   return (
-    <div
-      style={{
-        minHeight: '100dvh',
-        display: 'flex',
-        flexDirection: 'column',
-        background: 'var(--color-navy)',
-      }}
-    >
+    <div className="min-h-dvh flex flex-col bg-[var(--color-navy)]">
       {/* Hero */}
-      <div
-        style={{
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '48px 24px 32px',
-          textAlign: 'center',
-        }}
-      >
+      <div className="flex-1 flex flex-col items-center justify-center px-6 pt-12 pb-8 text-center">
         {/* Shield logo */}
-        <div
-          style={{
-            width: 88,
-            height: 88,
-            borderRadius: 24,
-            background: 'rgba(255,255,255,0.12)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            marginBottom: 28,
-          }}
-        >
+        <div className="w-[88px] h-[88px] rounded-[24px] bg-white/[0.12] flex items-center justify-center mb-7">
           <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
             <path
               d="M24 4L8 10V24C8 33.6 15.2 42.4 24 44C32.8 42.4 40 33.6 40 24V10L24 4Z"
-              fill="white"
-              opacity="0.95"
+              fill="white" opacity="0.95"
             />
             <path
               d="M19 24L22.5 27.5L30 20"
-              stroke="var(--color-navy)"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+              stroke="var(--color-navy)" strokeWidth="2.5"
+              strokeLinecap="round" strokeLinejoin="round"
             />
           </svg>
         </div>
 
-        <h1
-          style={{
-            fontSize: 32,
-            fontWeight: 800,
-            color: 'white',
-            marginBottom: 12,
-            letterSpacing: '-0.5px',
-          }}
-        >
+        <h1 className="text-[32px] font-extrabold text-white tracking-tight mb-3">
           Personal Data Vault
         </h1>
-
-        <p
-          style={{
-            fontSize: 16,
-            color: 'rgba(255,255,255,0.72)',
-            maxWidth: 300,
-            lineHeight: 1.6,
-            marginBottom: 48,
-          }}
-        >
+        <p className="text-[16px] text-white/72 max-w-[300px] leading-relaxed mb-12">
           Take full control of your personal data. Choose exactly what you share, with whom, and for how long.
         </p>
 
         {/* Feature pills */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%', maxWidth: 320, marginBottom: 48 }}>
-          {[
-            { icon: '🔒', text: 'Zero-trust encryption' },
-            { icon: '✅', text: 'Consent-driven access' },
-            { icon: '⚡', text: 'Instant revocation' },
-          ].map((f) => (
+        <div className="flex flex-col gap-3 w-full max-w-[320px] mb-12">
+          {FEATURES.map((f) => (
             <div
               key={f.text}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 12,
-                background: 'rgba(255,255,255,0.08)',
-                borderRadius: 12,
-                padding: '12px 16px',
-              }}
+              className="flex items-center gap-3 bg-white/[0.08] rounded-xl px-4 py-3"
             >
-              <span style={{ fontSize: 20 }}>{f.icon}</span>
-              <span style={{ color: 'rgba(255,255,255,0.9)', fontSize: 14, fontWeight: 500 }}>{f.text}</span>
+              <span className="text-[20px]">{f.icon}</span>
+              <span className="text-white/90 text-[14px] font-medium">{f.text}</span>
             </div>
           ))}
         </div>
       </div>
 
       {/* CTA */}
-      <div
-        style={{
-          padding: '24px 24px 40px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 12,
-        }}
-      >
+      <div className="px-6 pb-10 flex flex-col gap-3">
         <button
           onClick={() => router.push('/auth/register')}
-          style={{
-            width: '100%',
-            height: 52,
-            borderRadius: 14,
-            background: 'white',
-            border: 'none',
-            color: 'var(--color-navy)',
-            fontSize: 16,
-            fontWeight: 700,
-            cursor: 'pointer',
-          }}
+          className="w-full h-[52px] rounded-[14px] bg-white border-0 text-[var(--color-navy)] text-[16px] font-bold cursor-pointer hover:opacity-95 transition-opacity"
         >
           Create Account
         </button>
         <button
           onClick={() => router.push('/auth/sign-in')}
-          style={{
-            width: '100%',
-            height: 52,
-            borderRadius: 14,
-            background: 'rgba(255,255,255,0.12)',
-            border: '1.5px solid rgba(255,255,255,0.25)',
-            color: 'white',
-            fontSize: 16,
-            fontWeight: 600,
-            cursor: 'pointer',
-          }}
+          className="w-full h-[52px] rounded-[14px] bg-white/[0.12] border border-white/25 text-white text-[16px] font-semibold cursor-pointer hover:opacity-90 transition-opacity"
         >
           Sign In
         </button>
-
-        <p style={{ textAlign: 'center', color: 'rgba(255,255,255,0.45)', fontSize: 12, marginTop: 8 }}>
+        <p className="text-center text-white/45 text-[12px] mt-2">
           GDPR · DPDPA · PCI-DSS v4 compliant
         </p>
       </div>

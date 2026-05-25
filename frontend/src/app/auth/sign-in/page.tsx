@@ -1,17 +1,19 @@
 'use client';
 
-import { useState, FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
-import Button from '@/components/Button';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 export default function SignInPage() {
   const router = useRouter();
   const { login } = useAuth();
-  const [email, setEmail] = useState('');
+  const [email,    setEmail]    = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [error,    setError]    = useState('');
+  const [loading,  setLoading]  = useState(false);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -28,120 +30,53 @@ export default function SignInPage() {
   }
 
   return (
-    <div
-      style={{
-        minHeight: '100dvh',
-        display: 'flex',
-        flexDirection: 'column',
-        background: 'var(--color-bg)',
-      }}
-    >
-      {/* Header */}
-      <div
-        style={{
-          background: 'var(--color-navy)',
-          padding: '56px 24px 32px',
-          textAlign: 'center',
-        }}
-      >
-        <div
-          style={{
-            width: 56,
-            height: 56,
-            borderRadius: 16,
-            background: 'rgba(255,255,255,0.15)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            margin: '0 auto 16px',
-          }}
-        >
+    <div className="min-h-dvh flex flex-col bg-[var(--color-bg)]">
+      {/* Hero */}
+      <div className="bg-[var(--color-navy)] px-6 pt-14 pb-8 text-center">
+        <div className="w-14 h-14 rounded-2xl bg-white/15 flex items-center justify-center mx-auto mb-4">
           <svg width="28" height="28" viewBox="0 0 48 48" fill="none">
-            <path
-              d="M24 4L8 10V24C8 33.6 15.2 42.4 24 44C32.8 42.4 40 33.6 40 24V10L24 4Z"
-              fill="white"
-            />
+            <path d="M24 4L8 10V24C8 33.6 15.2 42.4 24 44C32.8 42.4 40 33.6 40 24V10L24 4Z" fill="white" />
           </svg>
         </div>
-        <h1 style={{ color: 'white', fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Welcome back</h1>
-        <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: 14 }}>Sign in to your vault</p>
+        <h1 className="text-white text-[22px] font-bold mb-1">Welcome back</h1>
+        <p className="text-white/65 text-[14px]">Sign in to your vault</p>
       </div>
 
       {/* Form */}
       <form
         onSubmit={handleSubmit}
-        style={{
-          flex: 1,
-          padding: '32px 24px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 16,
-          maxWidth: 480,
-          width: '100%',
-          margin: '0 auto',
-        }}
+        className="flex-1 flex flex-col gap-4 px-6 py-8 w-full max-w-[480px] mx-auto"
       >
-        <div>
-          <label
-            htmlFor="email"
-            style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--color-text-2)', marginBottom: 6 }}
-          >
-            Email address
-          </label>
-          <input
-            id="email"
-            type="email"
-            autoComplete="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="form-input"
+        <div className="form-group">
+          <Label htmlFor="email">Email address</Label>
+          <Input
+            id="email" type="email" autoComplete="email" required
             placeholder="you@example.com"
+            value={email} onChange={(e) => setEmail(e.target.value)}
           />
         </div>
 
-        <div>
-          <label
-            htmlFor="password"
-            style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--color-text-2)', marginBottom: 6 }}
-          >
-            Password
-          </label>
-          <input
-            id="password"
-            type="password"
-            autoComplete="current-password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="form-input"
+        <div className="form-group">
+          <Label htmlFor="password">Password</Label>
+          <Input
+            id="password" type="password" autoComplete="current-password" required
             placeholder="••••••••"
+            value={password} onChange={(e) => setPassword(e.target.value)}
           />
         </div>
 
-        {error && (
-          <div className="form-error" role="alert">
-            {error}
-          </div>
-        )}
+        {error && <p className="form-error" role="alert">{error}</p>}
 
-        <Button type="submit" variant="primary" fullWidth loading={loading} style={{ marginTop: 8 }}>
+        <Button type="submit" variant="primary" fullWidth loading={loading} className="mt-2">
           Sign In
         </Button>
 
-        <p style={{ textAlign: 'center', color: 'var(--color-text-3)', fontSize: 14 }}>
+        <p className="text-center text-[var(--color-text-3)] text-[14px]">
           {"Don't have an account? "}
           <button
             type="button"
             onClick={() => router.push('/auth/register')}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: 'var(--color-blue)',
-              fontWeight: 600,
-              cursor: 'pointer',
-              fontSize: 14,
-            }}
+            className="bg-transparent border-0 text-[var(--color-blue)] font-semibold cursor-pointer text-[14px]"
           >
             Create one
           </button>
@@ -150,15 +85,7 @@ export default function SignInPage() {
         <button
           type="button"
           onClick={() => router.push('/')}
-          style={{
-            background: 'none',
-            border: 'none',
-            color: 'var(--color-text-3)',
-            cursor: 'pointer',
-            fontSize: 13,
-            textAlign: 'center',
-            marginTop: 4,
-          }}
+          className="bg-transparent border-0 text-[var(--color-text-3)] cursor-pointer text-[13px] text-center"
         >
           ← Back
         </button>

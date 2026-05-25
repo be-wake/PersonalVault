@@ -3,22 +3,24 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuthState } from '@/lib/auth';
 import { useRealtime, type RealtimeMessage } from '@/lib/ws';
-import { api, AuditEvent } from '@/lib/api';
+import { api, type AuditEvent } from '@/lib/api';
+import { Card } from '@/components/ui/card';
 import AuditEntry from '@/components/AuditEntry';
+import Spinner from '@/components/Spinner';
 
 const RESOURCE_FILTERS = [
-  { label: 'All', value: '' },
+  { label: 'All',      value: '' },
   { label: 'Identity', value: 'identity' },
-  { label: 'Address', value: 'address' },
-  { label: 'Payment', value: 'payment' },
+  { label: 'Address',  value: 'address' },
+  { label: 'Payment',  value: 'payment' },
   { label: 'Contacts', value: 'contacts' },
-  { label: 'Consent', value: 'consent' },
+  { label: 'Consent',  value: 'consent' },
 ];
 
 export default function HistoryPage() {
   const { user } = useAuthState();
-  const [events, setEvents] = useState<AuditEvent[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [events,   setEvents]   = useState<AuditEvent[]>([]);
+  const [loading,  setLoading]  = useState(true);
   const [resource, setResource] = useState('');
 
   const reload = useCallback(() => {
@@ -35,7 +37,11 @@ export default function HistoryPage() {
 
   // Auto-refresh after vault saves or consent changes (both create audit rows).
   const onRealtime = useCallback((msg: RealtimeMessage) => {
-    if (msg.type === 'VAULT_UPDATED' || msg.type?.startsWith('CONSENT_') || msg.event?.startsWith('consent.')) {
+    if (
+      msg.type === 'VAULT_UPDATED' ||
+      msg.type?.startsWith('CONSENT_') ||
+      msg.event?.startsWith('consent.')
+    ) {
       reload();
     }
   }, [reload]);
@@ -44,75 +50,48 @@ export default function HistoryPage() {
   return (
     <div className="page-container">
       {/* Header */}
-      <div style={{ background: 'var(--color-navy)', padding: '52px 24px 24px', marginBottom: 0 }}>
-        <h1 style={{ color: 'white', fontSize: 22, fontWeight: 800, marginBottom: 4 }}>Access History</h1>
-        <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13 }}>Full audit log of your data</p>
+      <div className="bg-[var(--color-navy)] -mx-4 px-6 pt-[52px] pb-6 mb-0">
+        <h1 className="text-white text-[22px] font-extrabold mb-1">Access History</h1>
+        <p className="text-white/60 text-[13px]">Full audit log of your data</p>
       </div>
 
       {/* Resource filter */}
-      <div
-        style={{
-          display: 'flex',
-          gap: 8,
-          padding: '12px 16px',
-          overflowX: 'auto',
-          background: 'white',
-          borderBottom: '1px solid var(--color-border)',
-        }}
-      >
-        {RESOURCE_FILTERS.map((f) => (
-          <button
-            key={f.value}
-            onClick={() => setResource(f.value)}
-            style={{
-              padding: '6px 14px',
-              borderRadius: 20,
-              border: 'none',
-              background: resource === f.value ? 'var(--color-navy)' : 'var(--color-bg)',
-              color: resource === f.value ? 'white' : 'var(--color-text-2)',
-              fontWeight: resource === f.value ? 700 : 500,
-              fontSize: 13,
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {f.label}
-          </button>
-        ))}
+      <div className="flex gap-2 px-4 py-3 overflow-x-auto bg-white border-b border-[var(--color-border)]">
+        {RESOURCE_FILTERS.map((f) => {
+          const active = resource === f.value;
+          return (
+            <button
+              key={f.value}
+              onClick={() => setResource(f.value)}
+              className="px-3.5 py-1.5 rounded-full border-0 text-[13px] cursor-pointer whitespace-nowrap transition-colors"
+              style={{
+                background: active ? 'var(--color-navy)' : 'var(--color-bg)',
+                color:      active ? 'white'            : 'var(--color-text-2)',
+                fontWeight: active ? 700 : 500,
+              }}
+            >
+              {f.label}
+            </button>
+          );
+        })}
       </div>
 
       {/* Events */}
-      <div style={{ padding: '16px 16px' }}>
-        {loading ? (
-          <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}>
-            <div className="spinner" />
-          </div>
-        ) : events.length === 0 ? (
+      <div className="px-4 py-4">
+        {loading ? <Spinner /> : events.length === 0 ? (
           <div className="empty-state">
-            <p style={{ fontSize: 32, marginBottom: 8 }}>📋</p>
-            <p style={{ fontWeight: 600, color: 'var(--color-text-2)', marginBottom: 4 }}>No events found</p>
-            <p style={{ fontSize: 13, color: 'var(--color-text-3)' }}>
+            <p className="text-[32px] mb-2">📋</p>
+            <p className="font-semibold text-[var(--color-text-2)] mb-1">No events found</p>
+            <p className="text-[13px] text-[var(--color-text-3)]">
               {resource ? `No ${resource} events recorded` : 'No audit events yet'}
             </p>
           </div>
         ) : (
-          <div
-            style={{
-              background: 'white',
-              borderRadius: 16,
-              border: '1px solid var(--color-border)',
-              overflow: 'hidden',
-            }}
-          >
+          <Card className="p-0 overflow-hidden">
             {events.map((event, i) => (
-              <div key={event.id}>
-                <AuditEntry event={event} />
-                {i < events.length - 1 && (
-                  <div style={{ height: 1, background: 'var(--color-border)', margin: '0 16px' }} />
-                )}
-              </div>
+              <AuditEntry key={event.id} event={event} divider={i > 0} />
             ))}
-          </div>
+          </Card>
         )}
       </div>
     </div>

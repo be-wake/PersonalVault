@@ -1,34 +1,23 @@
-import type { ConsentGrant } from '@/lib/api';
+import { Card } from './ui/card';
 import StatusBadge from './StatusBadge';
+import type { ConsentGrant } from '@/lib/api';
 
 interface RPHeaderProps {
-  rp: ConsentGrant['rp'];
+  rp:     ConsentGrant['rp'];
   status: ConsentGrant['status'];
 }
 
 export default function RPHeader({ rp, status }: RPHeaderProps) {
   return (
-    <div style={{
-      background: 'var(--color-navy)',
-      borderRadius: 'var(--radius-md)',
-      padding: 'var(--space-xl)',
-      display: 'flex',
-      alignItems: 'center',
-      gap: 'var(--space-lg)',
-    }}>
-      <div style={{
-        width: 52, height: 52, borderRadius: '50%',
-        background: 'rgba(255,255,255,0.15)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 22, fontWeight: 700, color: '#fff', flexShrink: 0,
-      }}>
+    <Card className="bg-[var(--color-navy)] border-0 flex items-center gap-4 p-6">
+      <div className="w-[52px] h-[52px] rounded-full bg-white/15 flex items-center justify-center text-[22px] font-bold text-white shrink-0">
         {rp.name[0]}
       </div>
-      <div style={{ flex: 1 }}>
-        <div style={{ fontSize: 17, fontWeight: 600, color: '#fff' }}>{rp.name}</div>
-        <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.65)', marginTop: 2 }}>{rp.domain}</div>
+      <div className="flex-1 min-w-0">
+        <p className="text-[17px] font-semibold text-white leading-snug">{rp.name}</p>
+        <p className="text-[13px] text-white/65 mt-0.5">{rp.domain}</p>
       </div>
       <StatusBadge status={status} />
-    </div>
+    </Card>
   );
 }
