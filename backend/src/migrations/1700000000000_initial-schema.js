@@ -11,8 +11,6 @@
  */
 
 exports.up = (pgm) => {
-  pgm.createExtension('pgcrypto', { ifNotExists: true });
-
   // ── Users ──────────────────────────────────────────────────────────────────
   pgm.sql(`
     CREATE TABLE IF NOT EXISTS users (

@@ -7,9 +7,9 @@
     "dev": "node --watch --env-file=.env src/server.js",
     "start": "node src/server.js",
     "lint": "eslint src --ext .js",
-    "migrate": "node-pg-migrate -m src/migrations",
-    "migrate:up": "node-pg-migrate up -m src/migrations",
-    "migrate:down": "node-pg-migrate down -m src/migrations"
+    "migrate": "node scripts/migrate.js up",
+    "migrate:up": "node scripts/migrate.js up",
+    "migrate:down": "node scripts/migrate.js down"
   },
   "dependencies": {
     "@azure/identity": "^4.4.1",
