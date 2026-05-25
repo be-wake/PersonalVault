@@ -25,7 +25,7 @@ export default function HistoryPage() {
   const [resource, setResource] = useState('');
 
   const fetchEvents = useCallback(() => {
-    if (!user) return Promise.resolve<AuditEvent[] | null>(null);
+    if (!user) return Promise.resolve<AuditEvent[]>([]);
     return api.audit.list(user.id, { resource: resource || undefined, limit: AUDIT_PAGE_LIMIT });
   }, [user, resource]);
 
@@ -33,7 +33,7 @@ export default function HistoryPage() {
     setLoading(true);
     void fetchEvents()
       .then((nextEvents) => {
-        if (nextEvents) setEvents(nextEvents);
+        setEvents(nextEvents);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -45,7 +45,7 @@ export default function HistoryPage() {
     let active = true;
     void fetchEvents()
       .then((nextEvents) => {
-        if (active && nextEvents) setEvents(nextEvents);
+        if (active) setEvents(nextEvents);
       })
       .catch(() => {})
       .finally(() => {
