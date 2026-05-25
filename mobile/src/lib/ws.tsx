@@ -1,4 +1,4 @@
-import React, {
+import {
   createContext, useContext, useEffect, useRef, useState, useCallback, type ReactNode,
 } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
@@ -8,15 +8,10 @@ import { useAuth } from './auth';
 import createLogger from './logger';
 
 /**
- * Mobile realtime layer (F25) — the React Native counterpart of the web
- * WebSocketProvider. Opens one WebSocket for the logged-in user and fans
- * messages out to any screen that subscribes via useRealtime().
- *
- * Resilience:
- *   - F23 auto-reconnect with exponential backoff + jitter (capped 30s)
- *   - E16 keepalive ping every 25s (server also heartbeats)
- *   - AppState aware: reconnects when the app returns to the foreground and
- *     stops retrying while backgrounded (saves battery/socket churn).
+ * Mobile WebSocket layer — mirrors the web WebSocketProvider.
+ * Opens one connection per logged-in user and fans messages to subscribers
+ * via useRealtime(). Auto-reconnects with exponential backoff (capped 30 s),
+ * pings every 25 s, and pauses retries while the app is backgrounded.
  */
 
 const log       = createLogger('ws');
@@ -25,10 +20,12 @@ const PING_MS        = 25_000;
 const MAX_BACKOFF_MS = 30_000;
 
 export interface RealtimeMessage {
-  type?: string;          // CONSENT_GRANTED | CONSENT_REVOKED | CONSENT_EXPIRED | CONNECTED
-  event?: string;         // legacy: consent.revoked
+  type?: string;
+  event?: string;
   grant?: any;
   grantId?: string;
+  resource?: 'identity' | 'address' | 'contacts' | 'cards';
+  data?: unknown;
   [k: string]: unknown;
 }
 
@@ -77,9 +74,8 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       const wsBase = API_URL.replace(/^http/, 'ws');
       setStatus('connecting');
 
-      // S6 — pass the JWT as a Sec-WebSocket-Protocol subprotocol value so it
-      // never appears in server access logs or network traces. The backend echoes
-      // back the matched protocol to complete the WS handshake (RFC 6455 §4.2.2).
+      // Pass the JWT as a subprotocol so it never appears in server access logs.
+      // The backend echoes back the matched protocol (RFC 6455 §4.2.2).
       const ws = new WebSocket(`${wsBase}/v1/ws`, [`pdv.token.${token}`]);
       wsRef.current = ws;
 

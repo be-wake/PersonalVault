@@ -1,16 +1,11 @@
 'use strict';
 
 /**
- * Step-up authentication tokens.
+ * Short-lived step-up tokens for sensitive operations.
  *
- * After a user satisfies a second factor (PIN, biometric, or TOTP), the
- * server issues a short-lived (default 5 min) signed token that the client
- * presents in `X-PDV-Stepup` for the next sensitive operation
- * (consent grant, consent revoke, payment card add, account delete, etc.).
- *
- * Tokens are scoped to a single user-id and bound to a hash of the request
- * intent (the route name) so a step-up for "grant" can't be replayed against
- * a "delete-account" call.
+ * After re-authenticating (password re-entry today; biometric/TOTP later),
+ * the server issues a 5-min token bound to a specific intent hash. The client
+ * presents it in X-PDV-Stepup so a "grant" token can't be replayed on "revoke".
  */
 
 const jwt    = require('jsonwebtoken');
@@ -22,10 +17,8 @@ const IS_PROD = process.env.NODE_ENV === 'production';
 
 const TTL = process.env.STEPUP_TOKEN_TTL || '5m';
 
-// Step-up is wired into sensitive routes but only ENFORCED when this flag is on.
-// Lets the backend ship the capability ahead of clients learning to send the
-// X-PDV-Stepup header (S2 / F19). Flip to 'true' once web + mobile fetch a
-// step-up token before sensitive actions.
+// Wired into routes but only enforced when STEPUP_ENFORCED=true, so the feature
+// can ship before all clients send the X-PDV-Stepup header.
 const ENFORCED = process.env.STEPUP_ENFORCED === 'true';
 
 function loadSecret() {
@@ -53,15 +46,9 @@ function issueStepUpToken(userId, intent, factor) {
   );
 }
 
-/**
- * Express middleware factory. Use as:
- *   router.post('/sensitive', requireStepUp('consent:grant'), handler);
- */
 function requireStepUp(intent) {
   const wanted = intentHash(intent);
   return (req, res, next) => {
-    // Wired but disabled until STEPUP_ENFORCED=true so we don't break clients
-    // that don't yet send the header.
     if (!ENFORCED) return next();
 
     const header = req.headers['x-pdv-stepup'];

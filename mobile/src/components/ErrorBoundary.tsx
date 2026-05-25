@@ -1,11 +1,6 @@
-/**
- * C11 — Top-level error boundary for the mobile app.
- *
- * Catches unhandled render errors and shows a recovery UI.
- * Place it as a wrapper in the root _layout.tsx.
- */
+/** Top-level error boundary for the mobile app. Catches render errors and shows a recovery UI. */
 
-import React, { Component, type ReactNode, type ErrorInfo } from 'react';
+import { Component, type ReactNode, type ErrorInfo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Colors } from '@/src/constants/colors';
 
@@ -31,7 +26,6 @@ export default class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    // In production, ship to Sentry (C12).
     console.error('[ErrorBoundary]', error, info.componentStack);
   }
 

@@ -1,17 +1,11 @@
 'use strict';
 
 /**
- * Redis client used for the consent-revocation cache.
+ * Consent-revocation cache.
  *
- * Design: when a grant is revoked, the grant-id is written to Redis with TTL
- * = max access-token lifetime. The consent-service (and any service that
- * issues data, like the RP read endpoints) checks this set on every request.
- * This ensures tokens issued moments before the revocation are blocked
- * within seconds without waiting for the JWT exp.
- *
- * In local dev / when REDIS_CONNECTION_STRING is unset, the client falls
- * back to an in-memory implementation with the same surface so the codebase
- * isn't conditional on Azure availability.
+ * Revoked grant IDs are stored with a TTL equal to the access-token lifetime so
+ * tokens issued just before revocation are blocked within seconds.
+ * Falls back to an in-memory map when REDIS_CONNECTION_STRING is not set.
  */
 
 const logger = require('./logger');
@@ -40,7 +34,6 @@ function memoryImpl() {
 }
 
 function redisImpl(conn) {
-  // Lazy require so the module isn't loaded in dev.
   const Redis = require('ioredis');
   const client = new Redis(conn, { lazyConnect: true, maxRetriesPerRequest: 3 });
   client.on('error', err => log.warn({ err }, 'Redis error'));

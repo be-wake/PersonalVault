@@ -10,7 +10,6 @@ import {
   type ReactNode,
 } from 'react';
 import type { User } from './api';
-// C8 — consolidated api export; auth helpers live under api.auth.*
 import { api, storeTokens, clearTokens } from './api';
 
 interface AuthState {
@@ -33,7 +32,6 @@ export function useAuth(): AuthState {
   return useContext(AuthContext);
 }
 
-/** Alias — protected layout uses this to read user/loading */
 export function useAuthState(): AuthState {
   return useContext(AuthContext);
 }
@@ -43,9 +41,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // S1 — the access token now lives in an httpOnly cookie, invisible to JS.
-    // We always call /auth/me to check session state; if the cookie is absent or
-    // expired the backend returns 401 and we clear any stale client state.
+    // Verify the session cookie on mount; clear stale state if it's expired.
     api.auth
       .me()
       .then((u) => setUser(u))
@@ -58,9 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (email: string, password: string) => {
     const { refreshToken, user: u } = await api.auth.login(email, password);
-    // S1 — access token is now set as an httpOnly cookie by the backend.
-    // We still persist the refresh token in localStorage as a fallback for
-    // the /auth/refresh body-param path (mobile parity).
+    // Access token is in the httpOnly cookie; persist refresh token as fallback.
     storeTokens('', refreshToken);
     setUser(u);
   }, []);
@@ -72,8 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(() => {
-    // clearTokens() calls POST /auth/logout to clear the httpOnly cookies.
-    clearTokens();
+    clearTokens(); // also calls POST /auth/logout to clear httpOnly cookies
     setUser(null);
   }, []);
 

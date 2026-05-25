@@ -1,11 +1,4 @@
-/**
- * Centralised logger — built on pino.
- *
- * Configuration (environment variables):
- *   LOG_LEVEL    — error | warn | info | debug | trace   (default: info in prod, debug in dev)
- *   LOG_ENABLED  — true | false                          (default: true)
- *   LOG_PRETTY   — true | false                          (default: true in dev, false in prod)
- */
+// Pino logger. Env vars: LOG_LEVEL (default info/debug), LOG_ENABLED, LOG_PRETTY.
 
 'use strict';
 
@@ -44,9 +37,7 @@ const logger = pino({
   level:   LOG_LEVEL,
   base:    { service: 'pdv-backend' },
 
-  // Scrub sensitive fields wherever they appear in log objects.
-  // Includes request-body paths in case a future change starts logging req.body
-  // (the default pino-http serialiser does not, but custom code might).
+  // Scrub sensitive fields from all log objects.
   redact: {
     paths: [
       'req.headers.authorization',

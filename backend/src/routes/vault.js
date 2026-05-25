@@ -16,14 +16,12 @@ const log    = logger.child({ module: 'route:vault' });
 const router = express.Router();
 router.use(verifyToken);
 
-// Propagates async errors to Express's global error handler
 const wrap = fn => (req, res, next) => fn(req, res, next).catch(next);
 
-// E8 — server-side whitelist for card brands.
 const ALLOWED_CARD_TYPES = new Set(['visa', 'mastercard', 'amex', 'discover', 'rupay']);
 
-// F11 — DPDPA S.16: minors require verifiable parental consent. We block until
-// that flow exists. Returns age in whole years, or null if DOB unparseable.
+// DPDPA S.16: users under 18 need parental consent (not yet built). Returns age
+// in whole years, or null if the date of birth is unparseable.
 function ageFromDob(dob) {
   if (!dob) return null;
   const d = new Date(dob);
@@ -55,8 +53,8 @@ router.get('/identity/:userId', wrap(async (req, res) => {
 router.put('/identity/:userId', wrap(async (req, res) => {
   if (req.params.userId !== req.user.sub) return forbidden(req, res);
 
-  // F11 — block under-18 (DPDPA S.16 parental-consent requirement not yet built).
-  if (req.body && req.body.date_of_birth !== undefined && req.body.date_of_birth !== null && req.body.date_of_birth !== '') {
+  // Block under-18 until parental-consent flow is built (DPDPA S.16).
+  if (req.body?.date_of_birth) {
     const age = ageFromDob(req.body.date_of_birth);
     if (age !== null && age < 18) {
       (req.log ?? log).warn({ userId: req.params.userId, age }, 'Identity update blocked — minor');
@@ -82,7 +80,7 @@ router.get('/address/:userId', wrap(async (req, res) => {
   res.json({ address: data || {} });
 }));
 
-// F7 — address:history scope: all addresses, newest first (current + archived).
+// All addresses, newest first (current + archived).
 router.get('/address/:userId/history', wrap(async (req, res) => {
   if (req.params.userId !== req.user.sub) return forbidden(req, res);
   const history = await getAddressHistory(req.params.userId);
@@ -108,7 +106,7 @@ router.get('/payment/:userId/cards', wrap(async (req, res) => {
   res.json({ cards });
 }));
 
-// Adding a card is sensitive → step-up gated (S2).
+// Adding a card requires step-up re-authentication.
 router.post('/payment/:userId/cards', requireStepUp('payment:add_card'), wrap(async (req, res) => {
   if (req.params.userId !== req.user.sub) return forbidden(req, res);
   const { card_type, last_4, expiry_mm_yy } = req.body;

@@ -1,14 +1,14 @@
-import React from 'react';
+import type { ButtonHTMLAttributes, CSSProperties } from 'react';
 
 type Variant = 'primary' | 'secondary' | 'destructive' | 'ghost';
 
-interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
   loading?: boolean;
   fullWidth?: boolean;
 }
 
-const STYLES: Record<Variant, React.CSSProperties> = {
+const STYLES: Record<Variant, CSSProperties> = {
   primary: {
     background: 'var(--color-navy)',
     color: '#fff',

@@ -1,18 +1,11 @@
 'use client';
 
 /**
- * App-wide realtime layer (F22 / C6).
+ * App-wide WebSocket layer.
  *
- * Opens a single WebSocket for the logged-in user and fans messages out to any
- * component that subscribes via useRealtime(). Replaces the per-page sockets the
- * consent-detail page used to create, so the dashboard and consents list update
- * live too.
- *
- * Resilience:
- *   - F23 auto-reconnect with exponential backoff + jitter (capped at 30s)
- *   - E16 app-level keepalive ping every 25s so Azure Container Apps doesn't
- *     drop the idle connection at ~4 min (server also pings; both directions
- *     keep it warm)
+ * Opens one connection per logged-in user and fans messages to subscribers via
+ * useRealtime(). Auto-reconnects with exponential backoff (capped at 30 s).
+ * Sends a keepalive ping every 25 s to prevent idle-connection drops on Azure.
  */
 
 import {

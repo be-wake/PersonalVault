@@ -16,7 +16,6 @@ const log    = logger.child({ module: 'route:consents' });
 const router = express.Router();
 router.use(verifyToken);
 
-// Propagates async errors to Express's global error handler
 const wrap = fn => (req, res, next) => fn(req, res, next).catch(next);
 
 // GET /v1/consents/:userId — list all grants
@@ -45,8 +44,8 @@ router.get('/:userId/:grantId', wrap(async (req, res) => {
   res.json({ grant });
 }));
 
-// POST /v1/consents — create a new consent grant
-// Sensitive → step-up gated (S2). Idempotency-Key header dedupes double-taps (E7).
+// POST /v1/consents — create a new consent grant (step-up required).
+// Idempotency-Key header deduplicates double-taps.
 router.post('/', requireStepUp('consent:grant'), wrap(async (req, res) => {
   const { relyingPartyId, scopes, purpose, expiresAt } = req.body;
   const userId         = req.user.sub;
@@ -74,8 +73,7 @@ router.post('/', requireStepUp('consent:grant'), wrap(async (req, res) => {
 
   const { id: grantId, created } = await createGrant(userId, relyingPartyId, scopes, purpose, expiresAt || null, idempotencyKey);
 
-  // Only emit the audit event + broadcast on a genuinely new grant — a replayed
-  // Idempotency-Key returns the original grant without side effects.
+  // Skip side-effects on a replayed Idempotency-Key — return the original grant.
   if (created) {
     await insertAuditEvent(grantId, userId, 'GRANT_CREATED', 'user', userId, { relyingPartyId, scopes, purpose });
     const grant = await getGrantById(grantId);
@@ -89,7 +87,7 @@ router.post('/', requireStepUp('consent:grant'), wrap(async (req, res) => {
   res.status(200).json({ grant });
 }));
 
-// DELETE /v1/consents/:grantId — revoke a grant (sensitive → step-up gated, S2)
+// DELETE /v1/consents/:grantId — revoke a grant (step-up required).
 router.delete('/:grantId', requireStepUp('consent:revoke'), wrap(async (req, res) => {
   const userId    = req.user.sub;
   const { grantId } = req.params;
@@ -118,11 +116,10 @@ router.delete('/:grantId', requireStepUp('consent:revoke'), wrap(async (req, res
     revokedBy: 'user', relyingPartyId: grant.relying_party_id,
   });
 
-  // F4 — block RP reads within seconds, ahead of the JWT's natural expiry.
+  // Block RP reads immediately, ahead of the JWT's natural expiry.
   await redisClient.revokeGrant(grantId);
 
-  // F3/F4 — publish the event. The in-process listener (dev) or a Service Bus
-  // subscription worker (prod) delivers the signed webhook to the RP.
+  // Publish revocation event — in-process listener (dev) or Service Bus (prod).
   await serviceBus.publish('consent.revoked', {
     grantId, userId, relyingPartyId: grant.relying_party_id, occurredAt: new Date().toISOString(),
   });

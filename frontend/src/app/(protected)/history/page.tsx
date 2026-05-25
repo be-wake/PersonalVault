@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useAuthState } from '@/lib/auth';
+import { useRealtime, type RealtimeMessage } from '@/lib/ws';
 import { api, AuditEvent } from '@/lib/api';
 import AuditEntry from '@/components/AuditEntry';
 
@@ -20,9 +21,8 @@ export default function HistoryPage() {
   const [loading, setLoading] = useState(true);
   const [resource, setResource] = useState('');
 
-  useEffect(() => {
+  const reload = useCallback(() => {
     if (!user) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: reset spinner when filter changes
     setLoading(true);
     api.audit
       .list(user.id, { resource: resource || undefined, limit: 50 })
@@ -30,6 +30,16 @@ export default function HistoryPage() {
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [user, resource]);
+
+  useEffect(() => { reload(); }, [reload]);
+
+  // Auto-refresh after vault saves or consent changes (both create audit rows).
+  const onRealtime = useCallback((msg: RealtimeMessage) => {
+    if (msg.type === 'VAULT_UPDATED' || msg.type?.startsWith('CONSENT_') || msg.event?.startsWith('consent.')) {
+      reload();
+    }
+  }, [reload]);
+  useRealtime(onRealtime);
 
   return (
     <div className="page-container">

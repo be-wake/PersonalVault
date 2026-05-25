@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import { auth as authApi, User, storeTokens, clearTokens } from './api';
 import createLogger from './logger';
@@ -23,7 +23,7 @@ const AuthContext = createContext<AuthContextType>({
   logout: async () => {},
 });
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
+export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser]         = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 

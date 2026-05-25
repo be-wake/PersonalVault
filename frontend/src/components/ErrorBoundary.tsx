@@ -1,12 +1,6 @@
 'use client';
 
-/**
- * C11 — Top-level error boundary.
- *
- * Catches unhandled render errors in the React tree and shows a recovery UI
- * instead of a blank page. Designed to sit near the root (layout.tsx) so it
- * catches errors in any page or component below it.
- */
+/** Top-level error boundary. Catches render errors and shows a recovery UI. */
 
 import { Component, type ReactNode, type ErrorInfo } from 'react';
 
@@ -34,8 +28,7 @@ export default class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    // In production this is where you'd ship to Sentry (C12).
-    console.error('[ErrorBoundary] Caught render error:', error, info.componentStack);
+    console.error('[ErrorBoundary]', error, info.componentStack);
   }
 
   handleReset = () => {

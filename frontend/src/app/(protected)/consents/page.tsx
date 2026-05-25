@@ -23,7 +23,7 @@ export default function ConsentsPage() {
 
   useEffect(() => { reload(); }, [reload]);
 
-  // Live updates (F22/C6): a grant/revoke/expiry anywhere refreshes the list.
+  // Refresh whenever a consent event fires.
   const onRealtime = useCallback((msg: RealtimeMessage) => {
     if (msg?.type === 'CONNECTED') return;
     if (msg?.type?.startsWith('CONSENT_') || msg?.event?.startsWith('consent.')) {

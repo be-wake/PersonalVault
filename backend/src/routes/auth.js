@@ -11,21 +11,21 @@ const logger   = require('../lib/logger');
 
 const IS_PROD = process.env.NODE_ENV === 'production';
 
-// S1 — cookie settings for the httpOnly session and refresh cookies.
-// SameSite:Strict prevents CSRF without needing a separate CSRF token.
+// httpOnly + SameSite:Strict cookies — no JS access, CSRF-safe without a token.
+// Refresh cookie is path-scoped to /auth/refresh so it isn't sent elsewhere.
 const SESSION_COOKIE_OPTS = {
   httpOnly: true,
   secure:   IS_PROD,
   sameSite: 'strict',
   path:     '/',
-  maxAge:   15 * 60 * 1000,            // 15 min — matches JWT ACCESS_TTL
+  maxAge:   15 * 60 * 1000,            // 15 min
 };
 const REFRESH_COOKIE_OPTS = {
   httpOnly: true,
   secure:   IS_PROD,
   sameSite: 'strict',
-  path:     '/auth/refresh',           // scoped so it isn't sent to other endpoints
-  maxAge:   30 * 24 * 60 * 60 * 1000, // 30 days — matches JWT REFRESH_TTL
+  path:     '/auth/refresh',
+  maxAge:   30 * 24 * 60 * 60 * 1000, // 30 days
 };
 
 function setAuthCookies(res, accessToken, refreshToken) {
@@ -41,13 +41,11 @@ function clearAuthCookies(res) {
 const log    = logger.child({ module: 'route:auth' });
 const router = express.Router();
 
-// Propagates async errors to Express's global error handler
 const wrap = fn => (req, res, next) => fn(req, res, next).catch(next);
 
-// ── Validation schemas (C1) ─────────────────────────────────────────────────
-// S8 — password policy: ≥ 10 chars with at least one letter and one digit.
-// (Account lockout / throttling is handled by authLimiter in server.js;
-//  breached-password check via HIBP is a future enhancement.)
+// ── Validation schemas ───────────────────────────────────────────────────────
+// Password: ≥ 10 chars, at least one letter and one digit.
+// Rate-limiting is handled by authLimiter in server.js.
 const passwordPolicy = z.string()
   .min(10, 'Password must be at least 10 characters.')
   .max(200, 'Password is too long.')
@@ -72,7 +70,7 @@ const stepUpSchema = z.object({
 
 // POST /auth/register
 router.post('/register', validate({ body: registerSchema }), wrap(async (req, res) => {
-  const { email, password, name } = req.body; // already validated + email lower-cased
+  const { email, password, name } = req.body;
 
   const existing = await findUserByEmail(email);
   if (existing) {
@@ -88,8 +86,7 @@ router.post('/register', validate({ body: registerSchema }), wrap(async (req, re
   const accessToken  = issueToken(userId, email.toLowerCase());
   const refreshToken = issueRefreshToken(userId);
 
-  // S1 — set httpOnly cookies for web clients; still return tokens in the body
-  // so native mobile clients (which can't use cookies) keep working.
+  // Set httpOnly cookies for web; return tokens in body for mobile clients.
   setAuthCookies(res, accessToken, refreshToken);
 
   res.status(201).json({
@@ -101,7 +98,7 @@ router.post('/register', validate({ body: registerSchema }), wrap(async (req, re
 
 // POST /auth/login
 router.post('/login', validate({ body: loginSchema }), wrap(async (req, res) => {
-  const { email, password } = req.body; // validated + email lower-cased
+  const { email, password } = req.body;
 
   const user = await findUserByEmail(email);
   if (!user) {
@@ -131,7 +128,7 @@ router.post('/login', validate({ body: loginSchema }), wrap(async (req, res) => 
 
 // POST /auth/refresh
 router.post('/refresh', wrap(async (req, res) => {
-  // S1 — accept refresh token from httpOnly cookie (web) or request body (mobile).
+  // Accept token from httpOnly cookie (web) or request body (mobile).
   const refreshToken = req.cookies?.pdv_refresh || req.body?.refreshToken;
   if (!refreshToken) {
     return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'refreshToken is required.' } });
@@ -153,15 +150,13 @@ router.post('/refresh', wrap(async (req, res) => {
   (req.log ?? log).debug({ userId: user.id }, 'Access token refreshed');
   const newAccessToken = issueToken(user.id, user.email);
 
-  // Rotate the session cookie for web clients; still return the token in the body
-  // so mobile clients can update their SecureStore.
+  // Rotate session cookie (web) and return new token in body (mobile).
   res.cookie('pdv_session', newAccessToken, SESSION_COOKIE_OPTS);
 
   res.json({ accessToken: newAccessToken });
 }));
 
-// POST /auth/logout — clears the httpOnly cookies for web clients.
-// Mobile clients should discard their stored tokens on the client side.
+// POST /auth/logout
 router.post('/logout', (req, res) => {
   clearAuthCookies(res);
   (req.log ?? log).debug({ requestId: req.id }, 'Auth cookies cleared');
@@ -179,15 +174,11 @@ router.get('/me', verifyToken, wrap(async (req, res) => {
   res.json({ user });
 }));
 
-// POST /auth/stepup — issue a short-lived step-up token after re-authentication.
-// The client calls this immediately before a sensitive action (consent grant/
-// revoke, add card, delete account) and presents the returned token in the
-// X-PDV-Stepup header. Second factor here is password re-entry; biometric/TOTP
-// factors (F18/F19) can issue the same token type with a different `factor`.
+// POST /auth/stepup — re-authenticate before a sensitive action.
+// Client presents the returned token in X-PDV-Stepup on the sensitive request.
 router.post('/stepup', verifyToken, validate({ body: stepUpSchema }), wrap(async (req, res) => {
   const { password, intent } = req.body;
 
-  // Need the password hash → look up by the email embedded in the access token.
   const user = await findUserByEmail(req.user.email);
   if (!user) {
     return res.status(401).json({ error: { code: 'INVALID_CREDENTIALS', message: 'Re-authentication failed.' } });

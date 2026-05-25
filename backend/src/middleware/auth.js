@@ -1,15 +1,11 @@
 'use strict';
 
 /**
- * Auth middleware: JWT verification for end-user requests + helpers to
- * issue/refresh tokens.
+ * JWT helpers and Express middleware for request authentication.
  *
- * Hardening notes:
- *   • Access and refresh tokens are signed with SEPARATE secrets so an access
- *     token can never be presented at /auth/refresh (or vice versa).
- *   • In production, the server refuses to start if either secret is missing,
- *     too short, or contains the literal string "change-me".
- *   • Each token carries an explicit `type` claim that is enforced on verify.
+ * Access and refresh tokens are signed with separate secrets and carry an
+ * explicit `type` claim so tokens cannot be cross-used. The server refuses
+ * to start in production if either secret is missing or too weak.
  */
 
 const jwt    = require('jsonwebtoken');
@@ -48,8 +44,6 @@ if (JWT_SECRET === JWT_REFRESH_SECRET) {
   log.warn('JWT_SECRET and JWT_REFRESH_SECRET are identical — acceptable only in dev');
 }
 
-// ── Token helpers ────────────────────────────────────────────────────────────
-
 function issueToken(userId, email) {
   return jwt.sign({ sub: userId, email, type: 'access' }, JWT_SECRET, { expiresIn: ACCESS_TTL });
 }
@@ -83,8 +77,6 @@ function verifyAccessToken(token) {
   return payload;
 }
 
-// ── Express middleware ───────────────────────────────────────────────────────
-
 function unauthorized(req, res, code, message) {
   return res.status(401).json({
     error: { code, message, requestId: req.id, timestamp: new Date().toISOString() },
@@ -92,8 +84,7 @@ function unauthorized(req, res, code, message) {
 }
 
 function verifyToken(req, res, next) {
-  // S1 — prefer the httpOnly session cookie (set for web clients); fall back to
-  // the Authorization: Bearer header (used by mobile and direct API callers).
+  // Prefer httpOnly cookie (web); fall back to Authorization header (mobile).
   const cookieToken  = req.cookies?.pdv_session;
   const authHeader   = req.headers.authorization;
   const bearerToken  = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;

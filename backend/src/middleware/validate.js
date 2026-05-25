@@ -1,13 +1,7 @@
 'use strict';
 
-/**
- * Tiny zod → express validator. Saves repeating the if/else 400 shape in
- * every route. Use as:
- *
- *   const { z } = require('zod');
- *   const { validate } = require('../middleware/validate');
- *   router.post('/login', validate({ body: z.object({ email: z.string().email(), password: z.string().min(8) }) }), handler);
- */
+// Zod → Express validator. Pass { body, query, params } schemas; validated
+// values replace req.body / req.validatedQuery / req.validatedParams.
 
 function validate(schemas) {
   return (req, res, next) => {
@@ -17,9 +11,7 @@ function validate(schemas) {
         req.body = parsed;
       }
       if (schemas.query) {
-        const parsed = schemas.query.parse(req.query);
-        // Express's req.query is read-only in v5+, so attach validated copy.
-        req.validatedQuery = parsed;
+        req.validatedQuery = schemas.query.parse(req.query);
       }
       if (schemas.params) {
         const parsed = schemas.params.parse(req.params);

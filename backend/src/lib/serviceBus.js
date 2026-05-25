@@ -1,11 +1,10 @@
 'use strict';
 
 /**
- * Service Bus publisher for revocation/expiry events.
+ * Publishes revocation/expiry events.
  *
- * Falls back to an EventEmitter when SERVICE_BUS_CONNECTION_STRING is not
- * set (local dev). The fallback emits to a process-local emitter so
- * webhook-sender.js can still be wired up for end-to-end tests.
+ * Uses Azure Service Bus in production; falls back to an in-process EventEmitter
+ * when SERVICE_BUS_CONNECTION_STRING is not set.
  */
 
 const { EventEmitter } = require('events');
@@ -38,10 +37,8 @@ function sbImpl(conn) {
     async publish(eventType, body) {
       await sender.sendMessages({ body, applicationProperties: { eventType } });
     },
-    on(/* eventType, handler */) {
-      // Cross-process subscriptions in Service Bus go via a Topic Subscription
-      // — that's a separate consumer worker, not in-process. Document and
-      // no-op here so callers don't accidentally wire local handlers in prod.
+    on() {
+      // Cross-process subscriptions need a separate Subscription receiver — not supported in-process.
       log.warn('In-process .on() not supported with Azure Service Bus — use a Subscription receiver');
     },
     async close() {
