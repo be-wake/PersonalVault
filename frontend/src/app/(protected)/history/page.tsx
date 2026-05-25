@@ -23,17 +23,38 @@ export default function HistoryPage() {
   const [loading,  setLoading]  = useState(true);
   const [resource, setResource] = useState('');
 
-  const reload = useCallback(() => {
-    if (!user) return;
-    setLoading(true);
-    api.audit
-      .list(user.id, { resource: resource || undefined, limit: 50 })
-      .then(setEvents)
-      .catch(() => {})
-      .finally(() => setLoading(false));
+  const fetchEvents = useCallback(() => {
+    if (!user) return Promise.resolve<AuditEvent[] | null>(null);
+    return api.audit.list(user.id, { resource: resource || undefined, limit: 50 });
   }, [user, resource]);
 
-  useEffect(() => { reload(); }, [reload]);
+  const reload = useCallback(() => {
+    setLoading(true);
+    void fetchEvents()
+      .then((nextEvents) => {
+        if (nextEvents) setEvents(nextEvents);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [fetchEvents]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    let active = true;
+    void fetchEvents()
+      .then((nextEvents) => {
+        if (active && nextEvents) setEvents(nextEvents);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [fetchEvents, user]);
 
   // Auto-refresh after vault saves or consent changes (both create audit rows).
   const onRealtime = useCallback((msg: RealtimeMessage) => {
@@ -62,7 +83,11 @@ export default function HistoryPage() {
           return (
             <button
               key={f.value}
-              onClick={() => setResource(f.value)}
+              onClick={() => {
+                if (resource === f.value) return;
+                setLoading(true);
+                setResource(f.value);
+              }}
               className="px-3.5 py-1.5 rounded-full border-0 text-[13px] cursor-pointer whitespace-nowrap transition-colors"
               style={{
                 background: active ? 'var(--color-navy)' : 'var(--color-bg)',
