@@ -34,7 +34,22 @@ function broadcastToUser(userId, payload) {
 }
 
 function attachWebSocket(server) {
-  const wss = new WebSocketServer({ server, path: '/v1/ws' });
+  const wss = new WebSocketServer({
+    server,
+    path: '/v1/ws',
+    // S6 — Mobile client embeds the JWT as a Sec-WebSocket-Protocol value
+    // "pdv.token.<jwt>" so it never appears in URL access logs. We echo it
+    // back to satisfy RFC 6455 §4.2.2. Web clients use httpOnly cookies and
+    // send no subprotocol header, so handleProtocols is not called for them
+    // (the ws library only invokes this when the client advertises at least one
+    // protocol).
+    handleProtocols: (protocols) => {
+      for (const p of protocols) {
+        if (p.startsWith('pdv.token.')) return p;
+      }
+      return false;
+    },
+  });
 
   // E16 — heartbeat. Azure Container Apps closes idle connections at ~4 min.
   // Ping every WS_HEARTBEAT_MS; terminate any client that didn't pong since the
@@ -56,17 +71,21 @@ function attachWebSocket(server) {
     // Any inbound app-level frame (e.g. the client's keepalive PING) also counts
     // as liveness. We don't otherwise act on client messages.
     ws.on('message', () => { ws.isAlive = true; });
-    const url   = new URL(req.url, 'ws://localhost');
 
-    // S1/S6 — prefer the httpOnly session cookie (set by the web client, sent
-    // automatically on the HTTP upgrade); fall back to the ?token query param
-    // (used by the mobile app, which can't set cookies).
+    // S1 — web client: JWT arrives in the httpOnly pdv_session cookie sent
+    //      automatically on the HTTP Upgrade request.
+    // S6 — mobile client: JWT is embedded in the Sec-WebSocket-Protocol value
+    //      "pdv.token.<jwt>" (handleProtocols above echoed it back to complete
+    //      the handshake). Token never appears in the URL or access logs.
     const cookieToken = (() => {
       const raw = req.headers.cookie || '';
       const match = raw.match(/(?:^|;\s*)pdv_session=([^;]+)/);
       return match ? decodeURIComponent(match[1]) : null;
     })();
-    const token = cookieToken || url.searchParams.get('token');
+    const protocolToken = ws.protocol?.startsWith('pdv.token.')
+      ? ws.protocol.slice('pdv.token.'.length)
+      : null;
+    const token = cookieToken || protocolToken;
 
     if (!token) {
       log.warn({ ip: req.socket?.remoteAddress }, 'WS connection rejected — no token');

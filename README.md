@@ -116,8 +116,10 @@ npx expo start                # scan QR with Expo Go, or press 'a' for Android e
 | Workflow | Trigger | What it does |
 |---|---|---|
 | `lint.yml` | Push / PR to `main` (path-filtered) | ESLint on changed packages |
-| `backend.yml` | Push to `main` → `backend/**` | `az acr build` → `az containerapp update` |
-| `frontend.yml` | Push to `main` → `frontend/**` | `az acr build` → `az containerapp update` |
+| `backend.yml` | Push to `main` → `backend/**` | Migrate DB → `az acr build` → `az containerapp update` (production) |
+| `frontend.yml` | Push to `main` → `frontend/**` | `az acr build` → `az containerapp update` (production) |
+| `backend-staging.yml` | Push to `staging` → `backend/**` | Migrate staging DB → build + deploy to `pdv-api-staging` |
+| `frontend-staging.yml` | Push to `staging` → `frontend/**` | Build + deploy to `pdv-web-staging` |
 | `mobile.yml` | Push to `main` → `mobile/**` | `eas build --profile production` |
 | `infra.yml` | Manual dispatch | `az deployment group create` (Bicep) |
 

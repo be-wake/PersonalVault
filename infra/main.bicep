@@ -105,6 +105,8 @@ resource acrPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
 }
 
 // ── Key Vault (O5) ────────────────────────────────────────────────────────────
+// Best practice: keep purge protection ON. It cannot be turned off after the
+// fact, so set it from day one. Soft-delete retention defaults to 90 days.
 resource kv 'Microsoft.KeyVault/vaults@2023-07-01' = {
   name: kvName
   location: location
@@ -113,6 +115,13 @@ resource kv 'Microsoft.KeyVault/vaults@2023-07-01' = {
     sku: { family: 'A', name: 'standard' }
     enableRbacAuthorization: true
     enableSoftDelete: true
+    enablePurgeProtection: true
+    softDeleteRetentionInDays: 90
+    publicNetworkAccess: 'Enabled'
+    networkAcls: {
+      defaultAction: 'Allow'
+      bypass: 'AzureServices'
+    }
   }
 }
 
@@ -193,6 +202,20 @@ resource pgFirewallAzure 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRule
 
 var databaseUrl = 'postgresql://${pgAdminUser}:${pgAdminPassword}@${postgres.properties.fullyQualifiedDomainName}:5432/${dbName}?sslmode=require'
 
+// Persist the composed connection string in Key Vault so the backend reads it
+// like any other secret instead of having the password sit in plain text in
+// the Container App's secret config. Depends on the Azure firewall rule so the
+// secret is only written once Postgres is reachable from the deploy runner.
+resource secDatabaseUrl 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+  parent: kv
+  name: 'database-url'
+  properties: { value: databaseUrl }
+  dependsOn: [
+    pgDatabase
+    pgFirewallAzure
+  ]
+}
+
 // ── Container Apps environment ────────────────────────────────────────────────
 resource managedEnv 'Microsoft.App/managedEnvironments@2024-03-01' = {
   name: envName
@@ -235,12 +258,14 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
       ]
       secrets: [
         // Key Vault references (O5) — values never appear in app config.
-        { name: 'database-url', value: databaseUrl }
-        { name: 'jwt-secret',          keyVaultUrl: secJwt.properties.secretUri,        identity: uamiResId }
-        { name: 'jwt-refresh-secret',  keyVaultUrl: secJwtRefresh.properties.secretUri, identity: uamiResId }
-        { name: 'stepup-secret',       keyVaultUrl: secStepUp.properties.secretUri,     identity: uamiResId }
-        { name: 'webhook-hmac-secret', keyVaultUrl: secWebhook.properties.secretUri,    identity: uamiResId }
-        { name: 'field-kek-base64',    keyVaultUrl: secKek.properties.secretUri,        identity: uamiResId }
+        // DATABASE_URL is composed in this template (Postgres password +
+        // hostname) and written to KV above as `secDatabaseUrl`.
+        { name: 'database-url',        keyVaultUrl: secDatabaseUrl.properties.secretUri, identity: uamiResId }
+        { name: 'jwt-secret',          keyVaultUrl: secJwt.properties.secretUri,         identity: uamiResId }
+        { name: 'jwt-refresh-secret',  keyVaultUrl: secJwtRefresh.properties.secretUri,  identity: uamiResId }
+        { name: 'stepup-secret',       keyVaultUrl: secStepUp.properties.secretUri,      identity: uamiResId }
+        { name: 'webhook-hmac-secret', keyVaultUrl: secWebhook.properties.secretUri,     identity: uamiResId }
+        { name: 'field-kek-base64',    keyVaultUrl: secKek.properties.secretUri,         identity: uamiResId }
       ]
     }
     template: {
@@ -261,8 +286,12 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'PDV_FIELD_KEK_BASE64', secretRef: 'field-kek-base64' }
           ]
           probes: [
+            // Both probes hit /health today. /health does NOT touch the DB,
+            // so the readiness check is currently a "process is alive" check;
+            // see PRODUCTION_READINESS_REVIEW.md §O12 for the planned /ready
+            // endpoint that pings Postgres.
             { type: 'Liveness',  httpGet: { path: '/health', port: 8080 }, periodSeconds: 30 }
-            { type: 'Readiness', httpGet: { path: '/ready',  port: 8080 }, periodSeconds: 15 }
+            { type: 'Readiness', httpGet: { path: '/health', port: 8080 }, periodSeconds: 15 }
           ]
         }
       ]
@@ -283,7 +312,9 @@ resource web 'Microsoft.App/containerApps@2024-03-01' = {
   properties: {
     managedEnvironmentId: managedEnv.id
     configuration: {
-      ingress: { external: true, targetPort: 3000, transport: 'auto' }
+      // The frontend Dockerfile sets ENV PORT=8080 and EXPOSE 8080. Keep
+      // the Container App's targetPort in sync — 3000 would never connect.
+      ingress: { external: true, targetPort: 8080, transport: 'auto' }
       registries: [
         { server: acr.properties.loginServer, identity: uamiResId }
       ]
@@ -296,7 +327,7 @@ resource web 'Microsoft.App/containerApps@2024-03-01' = {
           resources: { cpu: json('0.5'), memory: '1Gi' }
           env: [
             { name: 'NODE_ENV', value: 'production' }
-            { name: 'PORT', value: '3000' }
+            { name: 'PORT', value: '8080' }
             { name: 'NEXT_PUBLIC_API_URL', value: 'https://${api.properties.configuration.ingress.fqdn}' }
           ]
         }
@@ -308,8 +339,27 @@ resource web 'Microsoft.App/containerApps@2024-03-01' = {
 }
 
 // ── Outputs ───────────────────────────────────────────────────────────────────
+// Workflows consume these via `az deployment group show … -o json` and then
+// set repo Variables so backend.yml / frontend.yml don't hardcode names.
+output resourceGroupName string = resourceGroup().name
+output location          string = location
+
+output acrName        string = acr.name
 output acrLoginServer string = acr.properties.loginServer
-output backendFqdn    string = api.properties.configuration.ingress.fqdn
+
+output backendAppName string = api.name
+output backendFqdn   string = api.properties.configuration.ingress.fqdn
+output backendUrl    string = 'https://${api.properties.configuration.ingress.fqdn}'
+
+output frontendAppName string = web.name
 output frontendFqdn   string = web.properties.configuration.ingress.fqdn
-output keyVaultName   string = kv.name
-output postgresFqdn   string = postgres.properties.fullyQualifiedDomainName
+output frontendUrl    string = 'https://${web.properties.configuration.ingress.fqdn}'
+
+output keyVaultName       string = kv.name
+output keyVaultUri        string = kv.properties.vaultUri
+output managedIdentityClientId string = uami.properties.clientId
+output containerEnvName   string = managedEnv.name
+output logAnalyticsName   string = law.name
+
+output postgresFqdn    string = postgres.properties.fullyQualifiedDomainName
+output postgresDatabase string = dbName

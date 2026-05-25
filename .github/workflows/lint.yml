@@ -1,17 +1,17 @@
 # O2 — Lint CI: runs ESLint on backend, Next.js lint on frontend, and Expo ESLint
-# on mobile for every push to main and every pull request targeting main.
+# on mobile for every push to main/staging and every pull request targeting them.
 name: Lint
 
 on:
   push:
-    branches: [main]
+    branches: [main, staging]
     paths:
       - "backend/**"
       - "frontend/**"
       - "mobile/**"
       - ".github/workflows/lint.yml"
   pull_request:
-    branches: [main]
+    branches: [main, staging]
     paths:
       - "backend/**"
       - "frontend/**"

@@ -40,6 +40,22 @@ jobs:
             --location ${{ github.event.inputs.location }} \
             --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
+      - name: What-if (preview changes)
+        # Best practice: always validate Bicep with what-if before apply.
+        run: |
+          az deployment group what-if \
+            --resource-group ${{ vars.AZURE_RG }} \
+            --template-file infra/main.bicep \
+            --parameters \
+                appSuffix=${{ github.event.inputs.app_suffix }} \
+                pgAdminPassword='${{ secrets.PG_ADMIN_PASSWORD }}' \
+                jwtSecret='${{ secrets.JWT_SECRET }}' \
+                jwtRefreshSecret='${{ secrets.JWT_REFRESH_SECRET }}' \
+                stepUpSecret='${{ secrets.STEPUP_SECRET }}' \
+                webhookHmacSecret='${{ secrets.WEBHOOK_HMAC_SECRET }}' \
+                fieldKekBase64='${{ secrets.FIELD_KEK_BASE64 }}' \
+            --no-pretty-print || true
+
       - name: Deploy Bicep infrastructure
         id: deploy
         run: |
@@ -56,30 +72,46 @@ jobs:
                 fieldKekBase64='${{ secrets.FIELD_KEK_BASE64 }}' \
             --output json)
 
-          echo "$output" | jq '.properties.outputs'
+          # Extract every output the downstream deploy workflows need.
+          o=$(echo "$output" | jq -c '.properties.outputs')
 
-          burl=$(echo "$output"  | jq -r '.properties.outputs.backendFqdn.value')
-          furl=$(echo "$output"  | jq -r '.properties.outputs.frontendFqdn.value')
-          acr=$(echo "$output"   | jq -r '.properties.outputs.acrLoginServer.value')
-          kv=$(echo "$output"    | jq -r '.properties.outputs.keyVaultName.value')
+          echo "$o" | jq .   # logged for traceability
 
-          echo "backend_url=https://$burl"   >> $GITHUB_OUTPUT
-          echo "frontend_url=https://$furl"  >> $GITHUB_OUTPUT
-          echo "acr=$acr"                    >> $GITHUB_OUTPUT
-          echo "kv=$kv"                      >> $GITHUB_OUTPUT
+          extract() { echo "$o" | jq -r ".$1.value"; }
+
+          echo "backend_url=$(extract backendUrl)"             >> $GITHUB_OUTPUT
+          echo "frontend_url=$(extract frontendUrl)"           >> $GITHUB_OUTPUT
+          echo "backend_app_name=$(extract backendAppName)"    >> $GITHUB_OUTPUT
+          echo "frontend_app_name=$(extract frontendAppName)"  >> $GITHUB_OUTPUT
+          echo "acr_name=$(extract acrName)"                   >> $GITHUB_OUTPUT
+          echo "acr_login_server=$(extract acrLoginServer)"    >> $GITHUB_OUTPUT
+          echo "key_vault_name=$(extract keyVaultName)"        >> $GITHUB_OUTPUT
+          echo "container_env_name=$(extract containerEnvName)" >> $GITHUB_OUTPUT
 
       - name: Print deployment summary
         run: |
-          echo "## ✅ Infrastructure provisioned" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Resource | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
-          echo "| Backend URL   | ${{ steps.deploy.outputs.backend_url }} |"  >> $GITHUB_STEP_SUMMARY
-          echo "| Frontend URL  | ${{ steps.deploy.outputs.frontend_url }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| ACR           | \`${{ steps.deploy.outputs.acr }}\` |"      >> $GITHUB_STEP_SUMMARY
-          echo "| Key Vault     | \`${{ steps.deploy.outputs.kv }}\` |"       >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Next step" >> $GITHUB_STEP_SUMMARY
-          echo "Set these as GitHub Actions **Variables** so the deploy workflows target this stack:" >> $GITHUB_STEP_SUMMARY
-          echo "- \`BACKEND_URL\`  = \`${{ steps.deploy.outputs.backend_url }}\`"  >> $GITHUB_STEP_SUMMARY
-          echo "- \`FRONTEND_URL\` = \`${{ steps.deploy.outputs.frontend_url }}\`" >> $GITHUB_STEP_SUMMARY
+          {
+            echo "## ✅ Infrastructure provisioned"
+            echo ""
+            echo "| Resource | Value |"
+            echo "|---|---|"
+            echo "| Backend URL        | ${{ steps.deploy.outputs.backend_url }} |"
+            echo "| Frontend URL       | ${{ steps.deploy.outputs.frontend_url }} |"
+            echo "| Backend app name   | \`${{ steps.deploy.outputs.backend_app_name }}\` |"
+            echo "| Frontend app name  | \`${{ steps.deploy.outputs.frontend_app_name }}\` |"
+            echo "| ACR                | \`${{ steps.deploy.outputs.acr_login_server }}\` |"
+            echo "| Key Vault          | \`${{ steps.deploy.outputs.key_vault_name }}\` |"
+            echo "| Container Env      | \`${{ steps.deploy.outputs.container_env_name }}\` |"
+            echo ""
+            echo "### Next step — set these as GitHub Actions **Variables** (Settings → Variables → Actions)"
+            echo "so backend.yml / frontend.yml stop hard-coding resource names:"
+            echo ""
+            echo "\`\`\`"
+            echo "AZURE_RG          = ${{ vars.AZURE_RG }}"
+            echo "AZURE_ACR         = ${{ steps.deploy.outputs.acr_name }}"
+            echo "BACKEND_APP_NAME  = ${{ steps.deploy.outputs.backend_app_name }}"
+            echo "FRONTEND_APP_NAME = ${{ steps.deploy.outputs.frontend_app_name }}"
+            echo "BACKEND_URL       = ${{ steps.deploy.outputs.backend_url }}"
+            echo "FRONTEND_URL      = ${{ steps.deploy.outputs.frontend_url }}"
+            echo "\`\`\`"
+          } >> $GITHUB_STEP_SUMMARY

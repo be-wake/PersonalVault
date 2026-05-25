@@ -244,6 +244,7 @@ In CI the image is built by `az acr build` (no local Docker daemon required) and
 - [ ] All four JWT secrets set to strong unique values
 - [ ] `WEBHOOK_HMAC_SECRET` set (≥ 16 chars, no `change-me`)
 - [ ] `DATABASE_URL` points to Azure Postgres with `sslmode=require`
+- [ ] `DATABASE_URL` added as a **GitHub Actions repository secret** (used by the migration step in `backend.yml`)
 - [ ] `REDIS_CONNECTION_STRING` and `SERVICE_BUS_CONNECTION_STRING` set
 - [ ] `NODE_ENV=production`
 - [ ] Secrets stored in Azure Key Vault, not in Container App env vars

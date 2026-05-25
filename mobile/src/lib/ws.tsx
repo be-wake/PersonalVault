@@ -77,7 +77,10 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       const wsBase = API_URL.replace(/^http/, 'ws');
       setStatus('connecting');
 
-      const ws = new WebSocket(`${wsBase}/v1/ws?token=${encodeURIComponent(token)}`);
+      // S6 — pass the JWT as a Sec-WebSocket-Protocol subprotocol value so it
+      // never appears in server access logs or network traces. The backend echoes
+      // back the matched protocol to complete the WS handshake (RFC 6455 §4.2.2).
+      const ws = new WebSocket(`${wsBase}/v1/ws`, [`pdv.token.${token}`]);
       wsRef.current = ws;
 
       ws.onopen = () => {

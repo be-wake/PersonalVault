@@ -189,7 +189,7 @@ The `mobile.yml` GitHub Actions workflow runs `eas build --profile production` o
 
 ## Real-time updates
 
-`WebSocketProvider` opens a `ws(s)://` connection after sign-in. The URL is derived from `EXPO_PUBLIC_API_URL` by replacing the scheme. The token is currently passed as a `?token=` query parameter (tracked as **S6** — will move to `Sec-WebSocket-Protocol` header).
+`WebSocketProvider` opens a `ws(s)://` connection after sign-in. The URL is derived from `EXPO_PUBLIC_API_URL` by replacing the scheme. The JWT is passed as a `Sec-WebSocket-Protocol` subprotocol value (`pdv.token.<jwt>`) so it never appears in server access logs or URL traces.
 
 The provider reconnects with exponential backoff and sends a ping every 25 seconds to keep the connection alive through Azure Container Apps' idle connection timeout.
 
@@ -213,5 +213,5 @@ The `logger.ts` module writes structured logs to the console and optionally ship
 |---|---|
 | iOS support | Not yet configured (Android only) |
 | Push notifications | `expo-notifications` not installed yet |
-| WebSocket token in URL | S6 — to be moved to header |
+| WebSocket token in URL | ✅ S6 resolved — token sent via `Sec-WebSocket-Protocol` header |
 | Dark mode | Not implemented |
