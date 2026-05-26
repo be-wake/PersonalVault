@@ -13,7 +13,7 @@ export default function PrivacyPolicyPage() {
 
       <Section title="1. Who We Are">
         <p>
-          Tijori ("we", "our", or "us") is a personal data vault application developed by Bewake.
+          Tijori (&quot;we&quot;, &quot;our&quot;, or &quot;us&quot;) is a personal data vault application developed by Bewake.
           We help users securely store and control access to their personal data including identity,
           address, payment card references, and contact information.
         </p>
@@ -66,7 +66,7 @@ export default function PrivacyPolicyPage() {
       <Section title="6. Your Rights (GDPR / DPDPA)">
         <p>Depending on your jurisdiction, you have the right to:</p>
         <ul style={{ paddingLeft: 20, marginTop: 8 }}>
-          <li><strong>Access:</strong> download a copy of all your data (via the app's Export feature)</li>
+          <li><strong>Access:</strong> download a copy of all your data (via the app&apos;s Export feature)</li>
           <li><strong>Rectification:</strong> edit any stored data directly in the app</li>
           <li><strong>Erasure:</strong> delete your account and all associated data</li>
           <li><strong>Portability:</strong> export your data in JSON format</li>
@@ -98,7 +98,7 @@ export default function PrivacyPolicyPage() {
       <Section title="9. Changes to This Policy">
         <p>
           We may update this policy from time to time. We will notify you of significant changes
-          via email or an in-app notice. The "last updated" date at the top of this page reflects
+          via email or an in-app notice. The &quot;last updated&quot; date at the top of this page reflects
           the most recent revision.
         </p>
       </Section>
