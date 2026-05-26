@@ -41,7 +41,7 @@ async function initSchema() {
 
     `CREATE TABLE IF NOT EXISTS identity_data (
       id            TEXT PRIMARY KEY,
-      user_id       TEXT NOT NULL UNIQUE,
+      user_id       TEXT NOT NULL,
       first_name    TEXT,
       last_name     TEXT,
       email_primary TEXT,
@@ -80,7 +80,7 @@ async function initSchema() {
 
     `CREATE TABLE IF NOT EXISTS contacts (
       id               TEXT PRIMARY KEY,
-      user_id          TEXT NOT NULL UNIQUE,
+      user_id          TEXT NOT NULL,
       phone_primary    TEXT,
       phone_type       TEXT DEFAULT 'mobile',
       email_secondary  TEXT,
@@ -144,6 +144,9 @@ async function initSchema() {
     `ALTER TABLE contacts ADD COLUMN IF NOT EXISTS linkedin_url    TEXT`,
     `ALTER TABLE contacts ADD COLUMN IF NOT EXISTS twitter_handle  TEXT`,
     `ALTER TABLE contacts ADD COLUMN IF NOT EXISTS website_url     TEXT`,
+    // Multi-record vault support — identity cards and contacts per user
+    `ALTER TABLE identity_data DROP CONSTRAINT IF EXISTS identity_data_user_id_key`,
+    `ALTER TABLE contacts      DROP CONSTRAINT IF EXISTS contacts_user_id_key`,
   ];
   for (const statement of migrations) {
     await pool.query(statement);
@@ -159,6 +162,9 @@ async function initSchema() {
     `CREATE UNIQUE INDEX IF NOT EXISTS uq_address_current ON addresses (user_id) WHERE is_current = true`,
     // E7 — one grant per (user, idempotency key)
     `CREATE UNIQUE INDEX IF NOT EXISTS uq_consent_idem ON consent_grants (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL`,
+    // Multi-record vault lookups
+    `CREATE INDEX IF NOT EXISTS idx_identity_data_user ON identity_data (user_id, updated_at DESC)`,
+    `CREATE INDEX IF NOT EXISTS idx_contacts_user      ON contacts (user_id, updated_at DESC)`,
   ];
   for (const statement of indexes) {
     await pool.query(statement);

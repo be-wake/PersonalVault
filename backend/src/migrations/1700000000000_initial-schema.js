@@ -36,7 +36,7 @@ exports.up = (pgm) => {
   pgm.sql(`
     CREATE TABLE IF NOT EXISTS identity_data (
       id              TEXT PRIMARY KEY,
-      user_id         TEXT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+      user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       first_name      TEXT,
       last_name       TEXT,
       email_primary   TEXT,
@@ -49,6 +49,10 @@ exports.up = (pgm) => {
   // Carry forward legacy plaintext id_number into id_number_enc on first
   // migrate run, then keep both columns (the new code only reads/writes _enc).
   pgm.sql(`ALTER TABLE identity_data ADD COLUMN IF NOT EXISTS id_number_enc TEXT`);
+  // Allow multiple identity records/cards per user on existing databases.
+  pgm.sql(`ALTER TABLE identity_data DROP CONSTRAINT IF EXISTS identity_data_user_id_key`);
+  pgm.sql(`DROP INDEX IF EXISTS identity_data_user_id_key`);
+  pgm.sql(`CREATE INDEX IF NOT EXISTS idx_identity_data_user ON identity_data (user_id, updated_at DESC)`);
   pgm.sql(`
     DO $$
     BEGIN
@@ -103,7 +107,7 @@ exports.up = (pgm) => {
   pgm.sql(`
     CREATE TABLE IF NOT EXISTS contacts (
       id              TEXT PRIMARY KEY,
-      user_id         TEXT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+      user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       phone_primary   TEXT,
       phone_type      TEXT DEFAULT 'mobile',
       email_secondary TEXT,
@@ -112,6 +116,10 @@ exports.up = (pgm) => {
     )
   `);
   pgm.sql(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS social_handles JSONB`);
+  // Allow multiple contacts per user on existing databases.
+  pgm.sql(`ALTER TABLE contacts DROP CONSTRAINT IF EXISTS contacts_user_id_key`);
+  pgm.sql(`DROP INDEX IF EXISTS contacts_user_id_key`);
+  pgm.sql(`CREATE INDEX IF NOT EXISTS idx_contacts_user ON contacts (user_id, updated_at DESC)`);
 
   // ── Relying parties ───────────────────────────────────────────────────────
   pgm.sql(`
