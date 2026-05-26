@@ -146,9 +146,22 @@ export const vault = {
     }),
   deleteDocument: (userId: string, docId: string) =>
     request<{ message: string }>(`/v1/identity/${userId}/documents/${docId}`, { method: 'DELETE' }),
-  getAddress:    (userId: string) => request<{ address: AddressData }>(`/v1/address/${userId}`),
-  updateAddress: (userId: string, data: Partial<AddressData>) =>
-    request<{ address: AddressData }>(`/v1/address/${userId}`, { method: 'PUT', body: JSON.stringify(data) }),
+  getAddresses: (userId: string) =>
+    request<{ addresses: AddressData[] }>(`/v1/address/${userId}`),
+  addAddress: (userId: string, data: Partial<AddressData>) =>
+    request<{ id: string; addresses: AddressData[] }>(`/v1/address/${userId}`, {
+      method: 'POST',
+      body: JSON.stringify({ label: data.label ?? data.type ?? 'home', line1: data.line1, line2: data.line2, city: data.city, state: data.state, postal: data.postal, country: data.country }),
+    }),
+  updateAddress: (userId: string, addressId: string, data: Partial<AddressData>) =>
+    request<{ addresses: AddressData[] }>(`/v1/address/${userId}/${addressId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ label: data.label ?? data.type ?? 'home', line1: data.line1, line2: data.line2, city: data.city, state: data.state, postal: data.postal, country: data.country }),
+    }),
+  deleteAddress: (userId: string, addressId: string) =>
+    request<{ message: string }>(`/v1/address/${userId}/${addressId}`, { method: 'DELETE' }),
+  setPrimaryAddress: (userId: string, addressId: string) =>
+    request<{ addresses: AddressData[] }>(`/v1/address/${userId}/${addressId}/primary`, { method: 'PUT' }),
   getCards:      (userId: string) => request<{ cards: PaymentCard[] }>(`/v1/payment/${userId}/cards`),
   addCard:       (userId: string, data: { card_type: string; last_4: string; expiry_mm_yy: string }) =>
     request<{ card: PaymentCard }>(`/v1/payment/${userId}/cards`, { method: 'POST', body: JSON.stringify(data) }),
@@ -232,8 +245,16 @@ export interface IdentityResponse {
   documents: IdentityDocument[];
 }
 export interface AddressData {
-  id?: string; user_id?: string; type?: string; line1?: string; line2?: string;
-  city?: string; state?: string; postal?: string; country?: string;
+  id?: string; user_id?: string;
+  /** Address label: home | work | family | other */
+  label?: string;
+  type?: string;  // same as label (raw DB column)
+  line1?: string; line2?: string;
+  city?: string;  state?: string;
+  postal?: string; country?: string;
+  /** true = primary address for address:current scope */
+  is_current?: boolean;
+  created_at?: string;
 }
 export interface PaymentCard {
   id: string; user_id: string; card_token: string; card_type: string;

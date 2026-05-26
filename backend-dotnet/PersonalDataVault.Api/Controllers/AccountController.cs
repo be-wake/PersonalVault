@@ -44,7 +44,7 @@ public class AccountController(
         var user            = await users.FindByIdAsync(userId);
         var commonIdentity  = await vault.GetCommonIdentityAsync(userId);
         var identityDocs    = await vault.GetIdentityDocumentsAsync(userId);
-        var address         = await vault.GetCurrentAddressAsync(userId);
+        var addresses       = await vault.GetAllAddressesAsync(userId);
         var cards           = await vault.GetPaymentCardsAsync(userId);
         var contacts        = await vault.GetContactsAsync(userId);
         var grants          = await consents.GetGrantsByUserAsync(userId);
@@ -61,7 +61,7 @@ public class AccountController(
                     commonInfo = DecryptIdentity(commonIdentity),
                     documents  = identityDocs.Select(DecryptIdentity).ToList(),
                 },
-                address,
+                addresses,
                 paymentCards = cards,
                 contacts     = DecryptContacts(contacts),
             },

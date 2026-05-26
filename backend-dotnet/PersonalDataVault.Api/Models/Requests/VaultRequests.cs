@@ -40,9 +40,14 @@ public class IdentityDocumentRequest
     public string IdNumber { get; set; } = null!;
 }
 
+/// <summary>
+/// Create or update a named address entry.
+/// Label maps to the Type column (home | work | family | other).
+/// </summary>
 public class AddressRequest
 {
-    public string? Type { get; set; } = "current";
+    /// <summary>User-assigned label: home | work | family | other.</summary>
+    public string Label { get; set; } = "home";
     public string? Line1 { get; set; }
     public string? Line2 { get; set; }
     public string? City { get; set; }

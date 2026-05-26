@@ -15,10 +15,16 @@ public interface IVaultRepository
     Task<bool> UpdateIdentityDocumentAsync(string docId, string userId, IdentityData data);
     Task<bool> DeleteIdentityDocumentAsync(string docId, string userId);
 
-    // Address
+    // Address — all named addresses, multiple per user
+    Task<List<Address>> GetAllAddressesAsync(string userId);
+    Task<string> AddAddressAsync(string userId, Address data);
+    Task<bool> UpdateAddressAsync(string addressId, string userId, Address data);
+    Task<bool> DeleteAddressAsync(string addressId, string userId);
+    Task<bool> SetPrimaryAddressAsync(string addressId, string userId);
+
+    // kept for VaultBundle / scope engine — returns the IsCurrent == true address
     Task<Address?> GetCurrentAddressAsync(string userId);
     Task<List<Address>> GetAddressHistoryAsync(string userId);
-    Task UpsertAddressAsync(string userId, Address data);
 
     // Payment cards
     Task<List<PaymentCard>> GetPaymentCardsAsync(string userId);
@@ -115,37 +121,41 @@ public class VaultRepository(AppDbContext db) : IVaultRepository
     }
 
     // ── Address ───────────────────────────────────────────────────────────────
+    // Multiple named addresses per user. One is marked IsCurrent = true (primary)
+    // which is what the scope engine returns for the address:current scope.
 
-    public Task<Address?> GetCurrentAddressAsync(string userId) =>
-        db.Addresses
-          .Where(a => a.UserId == userId && a.IsCurrent)
-          .OrderByDescending(a => a.CreatedAt)
-          .FirstOrDefaultAsync();
-
-    public Task<List<Address>> GetAddressHistoryAsync(string userId) =>
+    public Task<List<Address>> GetAllAddressesAsync(string userId) =>
         db.Addresses
           .Where(a => a.UserId == userId)
-          .OrderByDescending(a => a.CreatedAt)
+          .OrderByDescending(a => a.IsCurrent)   // primary first
+          .ThenByDescending(a => a.CreatedAt)
           .ToListAsync();
 
-    public async Task UpsertAddressAsync(string userId, Address data)
+    public async Task<string> AddAddressAsync(string userId, Address data)
     {
         await using var tx = await db.Database.BeginTransactionAsync();
         try
         {
-            // Archive previous current address
-            await db.Addresses
-                .Where(a => a.UserId == userId && a.IsCurrent)
-                .ExecuteUpdateAsync(s => s.SetProperty(a => a.IsCurrent, false));
+            // First address for this user automatically becomes primary
+            bool hasExisting = await db.Addresses.AnyAsync(a => a.UserId == userId);
+            bool becomePrimary = !hasExisting;
 
-            data.Id = Guid.NewGuid().ToString();
-            data.UserId = userId;
-            data.IsCurrent = true;
+            if (becomePrimary)
+            {
+                await db.Addresses
+                    .Where(a => a.UserId == userId && a.IsCurrent)
+                    .ExecuteUpdateAsync(s => s.SetProperty(a => a.IsCurrent, false));
+            }
+
+            data.Id        = Guid.NewGuid().ToString();
+            data.UserId    = userId;
+            data.IsCurrent = becomePrimary;
             data.CreatedAt = DateTime.UtcNow;
-            if (string.IsNullOrEmpty(data.Type)) data.Type = "current";
+            if (string.IsNullOrEmpty(data.Type)) data.Type = "home";
             db.Addresses.Add(data);
             await db.SaveChangesAsync();
             await tx.CommitAsync();
+            return data.Id;
         }
         catch
         {
@@ -153,6 +163,99 @@ public class VaultRepository(AppDbContext db) : IVaultRepository
             throw;
         }
     }
+
+    public async Task<bool> UpdateAddressAsync(string addressId, string userId, Address data)
+    {
+        var existing = await db.Addresses
+            .FirstOrDefaultAsync(a => a.Id == addressId && a.UserId == userId);
+        if (existing is null) return false;
+
+        if (data.Type    is not null) existing.Type    = data.Type;
+        if (data.Line1   is not null) existing.Line1   = data.Line1;
+        if (data.Line2   is not null) existing.Line2   = data.Line2;
+        if (data.City    is not null) existing.City    = data.City;
+        if (data.State   is not null) existing.State   = data.State;
+        if (data.Postal  is not null) existing.Postal  = data.Postal;
+        if (data.Country is not null) existing.Country = data.Country;
+
+        await db.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<bool> DeleteAddressAsync(string addressId, string userId)
+    {
+        await using var tx = await db.Database.BeginTransactionAsync();
+        try
+        {
+            var address = await db.Addresses
+                .FirstOrDefaultAsync(a => a.Id == addressId && a.UserId == userId);
+            if (address is null) { await tx.RollbackAsync(); return false; }
+
+            bool wasPrimary = address.IsCurrent;
+            db.Addresses.Remove(address);
+            await db.SaveChangesAsync();
+
+            // Promote the most recent remaining address to primary when the primary is deleted
+            if (wasPrimary)
+            {
+                var next = await db.Addresses
+                    .Where(a => a.UserId == userId)
+                    .OrderByDescending(a => a.CreatedAt)
+                    .FirstOrDefaultAsync();
+                if (next is not null)
+                {
+                    next.IsCurrent = true;
+                    await db.SaveChangesAsync();
+                }
+            }
+
+            await tx.CommitAsync();
+            return true;
+        }
+        catch
+        {
+            await tx.RollbackAsync();
+            throw;
+        }
+    }
+
+    public async Task<bool> SetPrimaryAddressAsync(string addressId, string userId)
+    {
+        await using var tx = await db.Database.BeginTransactionAsync();
+        try
+        {
+            var address = await db.Addresses
+                .FirstOrDefaultAsync(a => a.Id == addressId && a.UserId == userId);
+            if (address is null) { await tx.RollbackAsync(); return false; }
+
+            // Demote everyone else, then mark this one as primary
+            await db.Addresses
+                .Where(a => a.UserId == userId && a.IsCurrent)
+                .ExecuteUpdateAsync(s => s.SetProperty(a => a.IsCurrent, false));
+
+            address.IsCurrent = true;
+            await db.SaveChangesAsync();
+            await tx.CommitAsync();
+            return true;
+        }
+        catch
+        {
+            await tx.RollbackAsync();
+            throw;
+        }
+    }
+
+    // Kept for VaultBundle / scope engine
+    public Task<Address?> GetCurrentAddressAsync(string userId) =>
+        db.Addresses
+          .Where(a => a.UserId == userId && a.IsCurrent)
+          .FirstOrDefaultAsync();
+
+    public Task<List<Address>> GetAddressHistoryAsync(string userId) =>
+        db.Addresses
+          .Where(a => a.UserId == userId)
+          .OrderByDescending(a => a.CreatedAt)
+          .ToListAsync();
 
     // ── Payment cards ─────────────────────────────────────────────────────────
 

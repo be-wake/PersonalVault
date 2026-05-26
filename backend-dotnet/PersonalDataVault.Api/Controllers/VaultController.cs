@@ -144,21 +144,23 @@ public class VaultController(
 
     // ── Address ───────────────────────────────────────────────────────────────
 
+    /// <summary>Returns all addresses for the user.  Primary address has is_current = true.</summary>
     [HttpGet("address/{userId}")]
-    public async Task<IActionResult> GetAddress(string userId)
+    public async Task<IActionResult> GetAddresses(string userId)
     {
         if (userId != UserId) return Forbid();
-        var address = await vault.GetCurrentAddressAsync(userId);
-        return Ok(new { address });
+        var addresses = await vault.GetAllAddressesAsync(userId);
+        return Ok(new { addresses });
     }
 
-    [HttpPut("address/{userId}")]
-    public async Task<IActionResult> UpdateAddress(string userId, [FromBody] AddressRequest req)
+    /// <summary>Add a new named address (Home, Work, Family, Other …).</summary>
+    [HttpPost("address/{userId}")]
+    public async Task<IActionResult> AddAddress(string userId, [FromBody] AddressRequest req)
     {
         if (userId != UserId) return Forbid();
         var data = new Address
         {
-            Type    = req.Type    ?? "current",
+            Type    = req.Label,
             Line1   = req.Line1,
             Line2   = req.Line2,
             City    = req.City,
@@ -166,12 +168,62 @@ public class VaultController(
             Postal  = req.Postal,
             Country = req.Country,
         };
-        await vault.UpsertAddressAsync(userId, data);
-        await audit.InsertEventAsync(null, userId, "ACCESS", "user", userId, new { resource = "address", action = "update" });
-        var updated = await vault.GetCurrentAddressAsync(userId);
-        return Ok(new { address = updated });
+        var id = await vault.AddAddressAsync(userId, data);
+        await audit.InsertEventAsync(null, userId, "ACCESS", "user", userId,
+            new { resource = "address", action = "add", label = req.Label });
+        var addresses = await vault.GetAllAddressesAsync(userId);
+        return StatusCode(201, new { id, addresses });
     }
 
+    /// <summary>Update an existing address entry.</summary>
+    [HttpPut("address/{userId}/{addressId}")]
+    public async Task<IActionResult> UpdateAddress(string userId, string addressId, [FromBody] AddressRequest req)
+    {
+        if (userId != UserId) return Forbid();
+        var data = new Address
+        {
+            Type    = req.Label,
+            Line1   = req.Line1,
+            Line2   = req.Line2,
+            City    = req.City,
+            State   = req.State,
+            Postal  = req.Postal,
+            Country = req.Country,
+        };
+        var found = await vault.UpdateAddressAsync(addressId, userId, data);
+        if (!found) return NotFound(ApiError.NotFound("Address not found.", RequestId));
+        await audit.InsertEventAsync(null, userId, "ACCESS", "user", userId,
+            new { resource = "address", action = "update", addressId });
+        var addresses = await vault.GetAllAddressesAsync(userId);
+        return Ok(new { addresses });
+    }
+
+    /// <summary>Remove an address.</summary>
+    [HttpDelete("address/{userId}/{addressId}")]
+    public async Task<IActionResult> DeleteAddress(string userId, string addressId)
+    {
+        if (userId != UserId) return Forbid();
+        var removed = await vault.DeleteAddressAsync(addressId, userId);
+        if (!removed) return NotFound(ApiError.NotFound("Address not found.", RequestId));
+        await audit.InsertEventAsync(null, userId, "ACCESS", "user", userId,
+            new { resource = "address", action = "delete", addressId });
+        return Ok(new { message = "Address removed." });
+    }
+
+    /// <summary>Mark an address as primary (is_current = true).  Used by address:current RP scope.</summary>
+    [HttpPut("address/{userId}/{addressId}/primary")]
+    public async Task<IActionResult> SetPrimaryAddress(string userId, string addressId)
+    {
+        if (userId != UserId) return Forbid();
+        var found = await vault.SetPrimaryAddressAsync(addressId, userId);
+        if (!found) return NotFound(ApiError.NotFound("Address not found.", RequestId));
+        await audit.InsertEventAsync(null, userId, "ACCESS", "user", userId,
+            new { resource = "address", action = "set_primary", addressId });
+        var addresses = await vault.GetAllAddressesAsync(userId);
+        return Ok(new { addresses });
+    }
+
+    /// <summary>Kept for backward compatibility — returns all addresses as history.</summary>
     [HttpGet("address/{userId}/history")]
     public async Task<IActionResult> GetAddressHistory(string userId)
     {

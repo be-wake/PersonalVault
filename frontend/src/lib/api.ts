@@ -169,17 +169,19 @@ export interface IdentityData {
   updated_at?: string;
 }
 
-// E1 — Postgres returns BOOLEAN, not a number. Was incorrectly typed as number.
 export interface AddressData {
   id?: string;
   user_id?: string;
-  type?: string;
+  /** Address label stored in the Type column: home | work | family | other */
+  label?: string;
+  type?: string;   // same as label (raw column name)
   line1?: string;
   line2?: string;
   city?: string;
   state?: string;
   postal?: string;
   country?: string;
+  /** true = primary address (used for address:current RP scope) */
   is_current?: boolean;
   created_at?: string;
 }
@@ -296,13 +298,36 @@ export const api = {
     deleteDocument: (userId: string, docId: string): Promise<void> =>
       request<void>(`/v1/identity/${userId}/documents/${docId}`, { method: 'DELETE' }),
 
-    getAddress: (userId: string): Promise<AddressData> =>
-      request<{ address: AddressData }>(`/v1/address/${userId}`).then((r) => r.address),
-    updateAddress: (userId: string, data: Partial<AddressData>): Promise<AddressData> =>
-      request<{ address: AddressData }>(`/v1/address/${userId}`, { method: 'PUT', body: JSON.stringify(data) }).then((r) => r.address),
-    // F7 — fetch all historical addresses (current + archived) for address:history scope
+    /** Returns all addresses; primary has is_current = true. */
+    getAddresses: (userId: string): Promise<AddressData[]> =>
+      request<{ addresses: AddressData[] }>(`/v1/address/${userId}`).then((r) => r.addresses ?? []),
+
+    /** Add a new named address. */
+    addAddress: (userId: string, data: Partial<AddressData>): Promise<{ id: string; addresses: AddressData[] }> =>
+      request<{ id: string; addresses: AddressData[] }>(`/v1/address/${userId}`, {
+        method: 'POST',
+        body: JSON.stringify({ label: data.label ?? data.type ?? 'home', line1: data.line1, line2: data.line2, city: data.city, state: data.state, postal: data.postal, country: data.country }),
+      }),
+
+    /** Update an existing address entry. */
+    updateAddress: (userId: string, addressId: string, data: Partial<AddressData>): Promise<AddressData[]> =>
+      request<{ addresses: AddressData[] }>(`/v1/address/${userId}/${addressId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ label: data.label ?? data.type ?? 'home', line1: data.line1, line2: data.line2, city: data.city, state: data.state, postal: data.postal, country: data.country }),
+      }).then((r) => r.addresses ?? []),
+
+    /** Remove an address. */
+    deleteAddress: (userId: string, addressId: string): Promise<void> =>
+      request<void>(`/v1/address/${userId}/${addressId}`, { method: 'DELETE' }),
+
+    /** Mark an address as primary (used by address:current RP scope). */
+    setPrimaryAddress: (userId: string, addressId: string): Promise<AddressData[]> =>
+      request<{ addresses: AddressData[] }>(`/v1/address/${userId}/${addressId}/primary`, { method: 'PUT' })
+        .then((r) => r.addresses ?? []),
+
+    /** @deprecated kept for address:history scope — same as getAddresses */
     getAddressHistory: (userId: string): Promise<AddressData[]> =>
-      request<{ history: AddressData[] }>(`/v1/address/${userId}/history`).then((r) => r.history),
+      request<{ history: AddressData[] }>(`/v1/address/${userId}/history`).then((r) => r.history ?? []),
 
     getCards: (userId: string): Promise<PaymentCard[]> =>
       request<{ cards: PaymentCard[] }>(`/v1/payment/${userId}/cards`).then((r) => r.cards),
