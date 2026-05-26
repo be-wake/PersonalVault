@@ -61,7 +61,7 @@ export default function ProfileScreen() {
     try {
       const data = await accountApi.export();
       await Share.share({
-        title: 'Personal Data Vault Export',
+        title: 'Tijori Export',
         message: JSON.stringify(data, null, 2),
       });
     } catch (e: unknown) {

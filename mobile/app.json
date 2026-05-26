@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Personal Data Vault",
-    "slug": "personal-data-vault",
+    "name": "Tijori",
+    "slug": "tijori",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -18,7 +18,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0f1b2d"
       },
-      "package": "com.bewake.personalvault",
+      "package": "com.bewake.tijori",
       "versionCode": 1,
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,

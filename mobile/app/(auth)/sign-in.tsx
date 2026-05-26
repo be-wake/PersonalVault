@@ -48,7 +48,7 @@ export default function SignIn() {
         {/* Logo / branding */}
         <View style={styles.header}>
           <Text style={styles.logo}>🔐</Text>
-          <Text style={styles.title}>Personal Data Vault</Text>
+          <Text style={styles.title}>Tijori</Text>
           <Text style={styles.subtitle}>Sign in to access your vault</Text>
         </View>
 
