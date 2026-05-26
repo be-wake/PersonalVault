@@ -34,8 +34,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "e6720ff9-400e-4e81-bb0e-f7bcbeb662c5"
+        "projectId": "6e50035e-68e3-46c8-876f-0444e56bda5b"
       }
-    }
+    },
+    "owner": "bewake"
   }
 }
