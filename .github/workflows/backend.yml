@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'backend/**'
+      - 'backend-dotnet/**'
       - '.github/workflows/backend.yml'
   workflow_dispatch:
 
@@ -12,9 +12,6 @@ permissions:
   id-token: write   # Required for OIDC login
   contents: read
 
-# O17 — resource names come from repo-level Actions Variables, with the current
-# hand-provisioned names as fallback defaults so the pipeline keeps working even
-# before the variables are set. Set these under Settings → Variables → Actions.
 env:
   ACR:     ${{ vars.AZURE_ACR        || 'pdvacrvivekverma' }}
   RG:      ${{ vars.AZURE_RG         || 'pdv-rg' }}
@@ -23,7 +20,7 @@ env:
 
 jobs:
   deploy:
-    name: Build & Deploy Backend
+    name: Build & Deploy Backend (.NET)
     runs-on: ubuntu-latest
     environment: production
 
@@ -41,36 +38,19 @@ jobs:
       - name: Install Container Apps CLI extension
         run: az extension add --name containerapp --upgrade -y
 
-      # E11 — Run pending migrations against the production database before the
-      # new image is deployed. node-pg-migrate is idempotent; running it on an
-      # already-current schema is a safe no-op.
-      # DATABASE_URL must be set as a GitHub Actions repository secret.
-      # In production it should point to Azure Postgres with ?sslmode=require.
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: backend/package-lock.json
+      # The .NET backend runs EnsureCreated() + idempotent ALTER TABLE migrations
+      # at startup, so no separate migration step is needed here.
+      # If you later want EF Core migrations instead, add:
+      #   dotnet tool install dotnet-ef && dotnet ef database update
 
-      - name: Install backend dependencies
-        run: npm ci
-        working-directory: backend
-
-      - name: Run database migrations
-        run: npm run migrate:up
-        working-directory: backend
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-
-      - name: Build & push image via ACR cloud build (no Docker needed)
+      - name: Build & push image via ACR cloud build (no Docker daemon needed)
         run: |
           az acr build \
             --registry "$ACR" \
             --image pdv-backend:${{ github.sha }} \
             --image pdv-backend:latest \
-            --file backend/Dockerfile \
-            ./backend
+            --file backend-dotnet/PersonalDataVault.Api/Dockerfile \
+            ./backend-dotnet/PersonalDataVault.Api
 
       - name: Deploy new image to Container App
         run: |
@@ -79,11 +59,29 @@ jobs:
             --resource-group "$RG" \
             --image "$ACR.azurecr.io/pdv-backend:${{ github.sha }}"
 
+      - name: Wait for revision to be healthy
+        run: |
+          echo "Waiting up to 3 minutes for new revision to become active…"
+          for i in $(seq 1 18); do
+            STATUS=$(az containerapp revision list \
+              --name "$APP" \
+              --resource-group "$RG" \
+              --query "[0].properties.healthState" -o tsv 2>/dev/null || echo "unknown")
+            echo "  Attempt $i: healthState = $STATUS"
+            if [ "$STATUS" = "Healthy" ]; then
+              echo "Revision is healthy."
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Warning: revision did not report Healthy within 3 minutes. Check Container Apps logs."
+
       - name: Print deployment summary
         run: |
-          echo "## ✅ Backend deployed" >> $GITHUB_STEP_SUMMARY
+          echo "## ✅ Backend (.NET) deployed" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| | |" >> $GITHUB_STEP_SUMMARY
           echo "|---|---|" >> $GITHUB_STEP_SUMMARY
-          echo "| Image | \`$ACR.azurecr.io/pdv-backend:${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| URL   | $APP_URL |" >> $GITHUB_STEP_SUMMARY
+          echo "| Image  | \`$ACR.azurecr.io/pdv-backend:${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| URL    | $APP_URL |" >> $GITHUB_STEP_SUMMARY
+          echo "| Runtime | .NET 8 / ASP.NET Core |" >> $GITHUB_STEP_SUMMARY

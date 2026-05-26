@@ -1,34 +1,27 @@
 name: Deploy Backend (Staging)
 
-# O6 — Staging environment. Triggered on push to the `staging` branch so every
-# PR merged to staging gets deployed before it reaches main/production.
-# Also available as workflow_dispatch for ad-hoc staging deploys.
 on:
   push:
     branches: [staging]
     paths:
-      - 'backend/**'
+      - 'backend-dotnet/**'
       - '.github/workflows/backend-staging.yml'
   workflow_dispatch:
 
 permissions:
-  id-token: write   # Required for OIDC login
+  id-token: write
   contents: read
 
-# Resource names follow the same convention as production but with a -staging suffix.
-# Set these under Settings → Variables → Actions.
 env:
-  ACR:     ${{ vars.AZURE_ACR              || 'pdvacrvivekverma' }}
-  RG:      ${{ vars.AZURE_RG              || 'pdv-rg' }}
-  APP:     ${{ vars.BACKEND_APP_NAME_STAGING || 'pdv-api-staging' }}
-  APP_URL: ${{ vars.BACKEND_URL_STAGING   || 'https://pdv-api-staging.niceground-cc94fda7.eastus.azurecontainerapps.io' }}
+  ACR:     ${{ vars.AZURE_ACR                 || 'pdvacrvivekverma' }}
+  RG:      ${{ vars.AZURE_RG                 || 'pdv-rg' }}
+  APP:     ${{ vars.BACKEND_APP_NAME_STAGING  || 'pdv-api-staging' }}
+  APP_URL: ${{ vars.BACKEND_URL_STAGING      || 'https://pdv-api-staging.niceground-cc94fda7.eastus.azurecontainerapps.io' }}
 
 jobs:
   deploy-staging:
-    name: Build & Deploy Backend — Staging
+    name: Build & Deploy Backend (.NET) — Staging
     runs-on: ubuntu-latest
-    # GitHub Actions environment so you can add reviewers / protection rules under
-    # Settings → Environments → staging.
     environment: staging
 
     steps:
@@ -45,32 +38,14 @@ jobs:
       - name: Install Container Apps CLI extension
         run: az extension add --name containerapp --upgrade -y
 
-      # E11 — Run pending migrations against staging DB before new image lands.
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: backend/package-lock.json
-
-      - name: Install backend dependencies
-        run: npm ci
-        working-directory: backend
-
-      - name: Run database migrations (staging)
-        run: npm run migrate:up
-        working-directory: backend
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL_STAGING }}
-
-      - name: Build & push image via ACR cloud build (no Docker needed)
+      - name: Build & push image via ACR cloud build
         run: |
           az acr build \
             --registry "$ACR" \
             --image pdv-backend-staging:${{ github.sha }} \
             --image pdv-backend-staging:staging \
-            --file backend/Dockerfile \
-            ./backend
+            --file backend-dotnet/PersonalDataVault.Api/Dockerfile \
+            ./backend-dotnet/PersonalDataVault.Api
 
       - name: Deploy new image to staging Container App
         run: |
@@ -81,9 +56,10 @@ jobs:
 
       - name: Print deployment summary
         run: |
-          echo "## ✅ Backend (staging) deployed" >> $GITHUB_STEP_SUMMARY
+          echo "## ✅ Backend (.NET, staging) deployed" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| | |" >> $GITHUB_STEP_SUMMARY
           echo "|---|---|" >> $GITHUB_STEP_SUMMARY
-          echo "| Image | \`$ACR.azurecr.io/pdv-backend-staging:${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| URL   | $APP_URL |" >> $GITHUB_STEP_SUMMARY
+          echo "| Image   | \`$ACR.azurecr.io/pdv-backend-staging:${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| URL     | $APP_URL |" >> $GITHUB_STEP_SUMMARY
+          echo "| Runtime | .NET 8 / ASP.NET Core |" >> $GITHUB_STEP_SUMMARY
