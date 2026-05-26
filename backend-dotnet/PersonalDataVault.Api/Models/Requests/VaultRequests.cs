@@ -2,6 +2,10 @@ using System.ComponentModel.DataAnnotations;
 
 namespace PersonalDataVault.Api.Models.Requests;
 
+/// <summary>
+/// Legacy flat request — kept for internal helpers that still call UpsertIdentityAsync.
+/// New callers should use IdentityCommonRequest or IdentityDocumentRequest.
+/// </summary>
 public class IdentityRequest
 {
     public string? FirstName { get; set; }
@@ -10,6 +14,30 @@ public class IdentityRequest
     public string? DateOfBirth { get; set; }
     public string? IdType { get; set; }
     public string? IdNumber { get; set; }
+}
+
+/// <summary>
+/// Personal info that is shared/identical across all government IDs —
+/// full name, date of birth, and primary e-mail.
+/// </summary>
+public class IdentityCommonRequest
+{
+    public string? FirstName { get; set; }
+    public string? LastName { get; set; }
+    public string? EmailPrimary { get; set; }
+    public string? DateOfBirth { get; set; }
+}
+
+/// <summary>
+/// A single government-issued identity document (Aadhaar, Passport,
+/// Driving License, PAN, Voter ID …).
+/// </summary>
+public class IdentityDocumentRequest
+{
+    [Required]
+    public string IdType { get; set; } = null!;
+    [Required]
+    public string IdNumber { get; set; } = null!;
 }
 
 public class AddressRequest

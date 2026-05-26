@@ -27,15 +27,16 @@ public class ScopeEngineService(ICryptoService crypto) : IScopeEngineService
 
     private static readonly Dictionary<string, ScopeDef> Scopes = new()
     {
-        ["identity:name"]    = new("identity",  ["first_name", "last_name"],                                       "NONE",    false),
-        ["identity:email"]   = new("identity",  ["email_primary"],                                                 "NONE",    false),
-        ["identity:dob"]     = new("identity",  ["date_of_birth"],                                                 "PARTIAL", false),
-        ["identity:gov_id"]  = new("identity",  ["id_type", "id_number"],                                         "PARTIAL", false),
-        ["address:current"]  = new("address",   ["line1", "line2", "city", "state", "postal", "country"],         "NONE",    false),
-        ["address:history"]  = new("address_history", ["line1", "line2", "city", "state", "postal", "country"],   "NONE",    false),
-        ["payment:card_ref"] = new("payment",   ["card_token", "card_type", "last_4", "expiry_mm_yy"],            "NONE",    true),
-        ["contacts:phone"]   = new("contacts",  ["phone_primary", "phone_type"],                                  "PARTIAL", false),
-        ["contacts:all"]     = new("contacts",  ["phone_primary", "phone_type", "email_secondary"],               "NONE",    false),
+        ["identity:name"]    = new("identity",            ["first_name", "last_name"],                                       "NONE",    false),
+        ["identity:email"]   = new("identity",            ["email_primary"],                                                 "NONE",    false),
+        ["identity:dob"]     = new("identity",            ["date_of_birth"],                                                 "PARTIAL", false),
+        // gov_id is now a list of documents; each document is projected individually
+        ["identity:gov_id"]  = new("identity_documents",  ["id_type", "id_number"],                                         "PARTIAL", false),
+        ["address:current"]  = new("address",             ["line1", "line2", "city", "state", "postal", "country"],         "NONE",    false),
+        ["address:history"]  = new("address_history",     ["line1", "line2", "city", "state", "postal", "country"],         "NONE",    false),
+        ["payment:card_ref"] = new("payment",             ["card_token", "card_type", "last_4", "expiry_mm_yy"],            "NONE",    true),
+        ["contacts:phone"]   = new("contacts",            ["phone_primary", "phone_type"],                                  "PARTIAL", false),
+        ["contacts:all"]     = new("contacts",            ["phone_primary", "phone_type", "email_secondary"],               "NONE",    false),
     };
 
     public bool IsKnown(string scope) => Scopes.ContainsKey(scope);
@@ -89,8 +90,13 @@ public class ScopeEngineService(ICryptoService crypto) : IScopeEngineService
     {
         var map = new Dictionary<string, object?>();
 
-        if (bundle.Identity is not null)
-            map["identity"] = ModelToDict(bundle.Identity);
+        // Common identity (name / DOB / email) — used by identity:name, :email, :dob
+        if (bundle.CommonIdentity is not null)
+            map["identity"] = ModelToDict(bundle.CommonIdentity);
+
+        // Government ID documents — used by identity:gov_id (list of documents)
+        if (bundle.IdentityDocuments.Count > 0)
+            map["identity_documents"] = bundle.IdentityDocuments.Select(ModelToDict).ToList();
 
         if (bundle.Address is not null)
             map["address"] = ModelToDict(bundle.Address);

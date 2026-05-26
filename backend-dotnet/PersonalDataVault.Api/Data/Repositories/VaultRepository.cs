@@ -5,9 +5,15 @@ namespace PersonalDataVault.Api.Data.Repositories;
 
 public interface IVaultRepository
 {
-    // Identity
-    Task<IdentityData?> GetIdentityAsync(string userId);
-    Task UpsertIdentityAsync(string userId, IdentityData data);
+    // Identity — common info (name / DOB / email), one record per user
+    Task<IdentityData?> GetCommonIdentityAsync(string userId);
+    Task UpsertCommonIdentityAsync(string userId, IdentityData data);
+
+    // Identity — government-issued documents, multiple per user
+    Task<List<IdentityData>> GetIdentityDocumentsAsync(string userId);
+    Task<string> AddIdentityDocumentAsync(string userId, IdentityData data);
+    Task<bool> UpdateIdentityDocumentAsync(string docId, string userId, IdentityData data);
+    Task<bool> DeleteIdentityDocumentAsync(string docId, string userId);
 
     // Address
     Task<Address?> GetCurrentAddressAsync(string userId);
@@ -28,7 +34,8 @@ public interface IVaultRepository
 }
 
 public record VaultBundle(
-    IdentityData? Identity,
+    IdentityData? CommonIdentity,
+    List<IdentityData> IdentityDocuments,
     Address? Address,
     List<Address> AddressHistory,
     List<PaymentCard> Payment,
@@ -36,33 +43,75 @@ public record VaultBundle(
 
 public class VaultRepository(AppDbContext db) : IVaultRepository
 {
-    // ── Identity ──────────────────────────────────────────────────────────────
+    // ── Identity — common info ────────────────────────────────────────────────
+    // The "common" record has IdType == null.  It stores name / DOB / email that
+    // are identical across every government ID the user registers.
 
-    public Task<IdentityData?> GetIdentityAsync(string userId) =>
-        db.IdentityData.FirstOrDefaultAsync(i => i.UserId == userId);
+    public Task<IdentityData?> GetCommonIdentityAsync(string userId) =>
+        db.IdentityData.FirstOrDefaultAsync(i => i.UserId == userId && i.IdType == null);
 
-    public async Task UpsertIdentityAsync(string userId, IdentityData data)
+    public async Task UpsertCommonIdentityAsync(string userId, IdentityData data)
     {
-        var existing = await GetIdentityAsync(userId);
+        var existing = await GetCommonIdentityAsync(userId);
         if (existing is not null)
         {
-            if (data.FirstName  is not null) existing.FirstName  = data.FirstName;
-            if (data.LastName   is not null) existing.LastName   = data.LastName;
+            if (data.FirstName    is not null) existing.FirstName    = data.FirstName;
+            if (data.LastName     is not null) existing.LastName     = data.LastName;
             if (data.EmailPrimary is not null) existing.EmailPrimary = data.EmailPrimary;
-            if (data.DateOfBirth is not null) existing.DateOfBirth = data.DateOfBirth;
-            if (data.IdType     is not null) existing.IdType     = data.IdType;
-            if (data.IdNumber   is not null) existing.IdNumber   = data.IdNumber;
+            if (data.DateOfBirth  is not null) existing.DateOfBirth  = data.DateOfBirth;
             existing.UpdatedAt = DateTime.UtcNow;
             db.IdentityData.Update(existing);
         }
         else
         {
-            data.Id = Guid.NewGuid().ToString();
-            data.UserId = userId;
+            data.Id        = Guid.NewGuid().ToString();
+            data.UserId    = userId;
+            data.IdType    = null;  // explicitly mark as "common" row
+            data.IdNumber  = null;
             data.UpdatedAt = DateTime.UtcNow;
             db.IdentityData.Add(data);
         }
         await db.SaveChangesAsync();
+    }
+
+    // ── Identity — government documents ──────────────────────────────────────
+    // Each document record has IdType set to a non-null value.
+
+    public Task<List<IdentityData>> GetIdentityDocumentsAsync(string userId) =>
+        db.IdentityData
+          .Where(i => i.UserId == userId && i.IdType != null)
+          .OrderBy(i => i.UpdatedAt)
+          .ToListAsync();
+
+    public async Task<string> AddIdentityDocumentAsync(string userId, IdentityData data)
+    {
+        data.Id        = Guid.NewGuid().ToString();
+        data.UserId    = userId;
+        data.UpdatedAt = DateTime.UtcNow;
+        db.IdentityData.Add(data);
+        await db.SaveChangesAsync();
+        return data.Id;
+    }
+
+    public async Task<bool> UpdateIdentityDocumentAsync(string docId, string userId, IdentityData data)
+    {
+        var existing = await db.IdentityData
+            .FirstOrDefaultAsync(i => i.Id == docId && i.UserId == userId && i.IdType != null);
+        if (existing is null) return false;
+        if (data.IdType   is not null) existing.IdType   = data.IdType;
+        if (data.IdNumber is not null) existing.IdNumber = data.IdNumber;
+        existing.UpdatedAt = DateTime.UtcNow;
+        db.IdentityData.Update(existing);
+        await db.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<bool> DeleteIdentityDocumentAsync(string docId, string userId)
+    {
+        var deleted = await db.IdentityData
+            .Where(i => i.Id == docId && i.UserId == userId && i.IdType != null)
+            .ExecuteDeleteAsync();
+        return deleted > 0;
     }
 
     // ── Address ───────────────────────────────────────────────────────────────
@@ -166,15 +215,23 @@ public class VaultRepository(AppDbContext db) : IVaultRepository
 
     public async Task<VaultBundle> GetVaultBundleAsync(string userId)
     {
-        var (identity, currentAddress, addressHistory, payment, contacts) = await (
-            GetIdentityAsync(userId),
-            GetCurrentAddressAsync(userId),
-            GetAddressHistoryAsync(userId),
-            GetPaymentCardsAsync(userId),
-            GetContactsAsync(userId)
-        ).WhenAll();
+        var commonIdentity    = GetCommonIdentityAsync(userId);
+        var identityDocuments = GetIdentityDocumentsAsync(userId);
+        var currentAddress    = GetCurrentAddressAsync(userId);
+        var addressHistory    = GetAddressHistoryAsync(userId);
+        var payment           = GetPaymentCardsAsync(userId);
+        var contacts          = GetContactsAsync(userId);
 
-        return new VaultBundle(identity, currentAddress, addressHistory, payment, contacts);
+        await Task.WhenAll(commonIdentity, identityDocuments, currentAddress,
+                           addressHistory, payment, contacts);
+
+        return new VaultBundle(
+            commonIdentity.Result,
+            identityDocuments.Result,
+            currentAddress.Result,
+            addressHistory.Result,
+            payment.Result,
+            contacts.Result);
     }
 }
 

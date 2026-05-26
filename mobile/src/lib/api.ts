@@ -130,9 +130,22 @@ export const auth = {
 
 // ── Vault ─────────────────────────────────────────────────────────────────────
 export const vault = {
-  getIdentity:   (userId: string) => request<{ identity: IdentityData }>(`/v1/identity/${userId}`),
-  updateIdentity: (userId: string, data: Partial<IdentityData>) =>
-    request<{ identity: IdentityData }>(`/v1/identity/${userId}`, { method: 'PUT', body: JSON.stringify(data) }),
+  getIdentity: (userId: string) =>
+    request<IdentityResponse>(`/v1/identity/${userId}`),
+  updateCommonInfo: (userId: string, data: Partial<IdentityCommon>) =>
+    request<{ commonInfo: IdentityCommon | null }>(`/v1/identity/${userId}`, {
+      method: 'PUT', body: JSON.stringify(data),
+    }),
+  addDocument: (userId: string, data: { id_type: string; id_number: string }) =>
+    request<{ id: string; documents: IdentityDocument[] }>(`/v1/identity/${userId}/documents`, {
+      method: 'POST', body: JSON.stringify({ idType: data.id_type, idNumber: data.id_number }),
+    }),
+  updateDocument: (userId: string, docId: string, data: { id_type: string; id_number: string }) =>
+    request<{ documents: IdentityDocument[] }>(`/v1/identity/${userId}/documents/${docId}`, {
+      method: 'PUT', body: JSON.stringify({ idType: data.id_type, idNumber: data.id_number }),
+    }),
+  deleteDocument: (userId: string, docId: string) =>
+    request<{ message: string }>(`/v1/identity/${userId}/documents/${docId}`, { method: 'DELETE' }),
   getAddress:    (userId: string) => request<{ address: AddressData }>(`/v1/address/${userId}`),
   updateAddress: (userId: string, data: Partial<AddressData>) =>
     request<{ address: AddressData }>(`/v1/address/${userId}`, { method: 'PUT', body: JSON.stringify(data) }),
@@ -200,9 +213,23 @@ export const auditApi = {
 export interface User {
   id: string; email: string; name: string; created_at?: string;
 }
+/** @deprecated Use IdentityCommon + IdentityDocument */
 export interface IdentityData {
   id?: string; user_id?: string; first_name?: string; last_name?: string;
   email_primary?: string; date_of_birth?: string; id_type?: string; id_number?: string;
+}
+/** Common personal info shared across all government IDs. */
+export interface IdentityCommon {
+  id?: string; user_id?: string; first_name?: string; last_name?: string;
+  email_primary?: string; date_of_birth?: string; updated_at?: string;
+}
+/** A single government-issued ID document (Aadhaar, Passport, DL …). */
+export interface IdentityDocument {
+  id: string; user_id?: string; id_type: string; id_number: string; updated_at?: string;
+}
+export interface IdentityResponse {
+  commonInfo: IdentityCommon | null;
+  documents: IdentityDocument[];
 }
 export interface AddressData {
   id?: string; user_id?: string; type?: string; line1?: string; line2?: string;

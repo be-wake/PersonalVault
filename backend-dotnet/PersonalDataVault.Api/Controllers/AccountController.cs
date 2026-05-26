@@ -40,14 +40,15 @@ public class AccountController(
     [HttpGet("export")]
     public async Task<IActionResult> Export()
     {
-        var userId   = UserId;
-        var user     = await users.FindByIdAsync(userId);
-        var identity = await vault.GetIdentityAsync(userId);
-        var address  = await vault.GetCurrentAddressAsync(userId);
-        var cards    = await vault.GetPaymentCardsAsync(userId);
-        var contacts = await vault.GetContactsAsync(userId);
-        var grants   = await consents.GetGrantsByUserAsync(userId);
-        var auditLog = await audit.GetEventsAsync(userId, new(Limit: 200));
+        var userId          = UserId;
+        var user            = await users.FindByIdAsync(userId);
+        var commonIdentity  = await vault.GetCommonIdentityAsync(userId);
+        var identityDocs    = await vault.GetIdentityDocumentsAsync(userId);
+        var address         = await vault.GetCurrentAddressAsync(userId);
+        var cards           = await vault.GetPaymentCardsAsync(userId);
+        var contacts        = await vault.GetContactsAsync(userId);
+        var grants          = await consents.GetGrantsByUserAsync(userId);
+        var auditLog        = await audit.GetEventsAsync(userId, new(Limit: 200));
 
         return Ok(new
         {
@@ -55,7 +56,11 @@ public class AccountController(
             user,
             vault = new
             {
-                identity = DecryptIdentity(identity),
+                identity = new
+                {
+                    commonInfo = DecryptIdentity(commonIdentity),
+                    documents  = identityDocs.Select(DecryptIdentity).ToList(),
+                },
                 address,
                 paymentCards = cards,
                 contacts     = DecryptContacts(contacts),

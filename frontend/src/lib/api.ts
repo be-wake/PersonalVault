@@ -130,6 +130,33 @@ export interface RelyingParty {
   description?: string;
 }
 
+/** Common personal info (name / DOB) — shared across all government IDs. */
+export interface IdentityCommon {
+  id?: string;
+  user_id?: string;
+  first_name?: string;
+  last_name?: string;
+  email_primary?: string;
+  date_of_birth?: string;
+  updated_at?: string;
+}
+
+/** A single government-issued identity document (Aadhaar, Passport, DL …). */
+export interface IdentityDocument {
+  id: string;
+  user_id?: string;
+  id_type: string;
+  id_number: string;
+  updated_at?: string;
+}
+
+/** Shape returned by GET /v1/identity/{userId}. */
+export interface IdentityResponse {
+  commonInfo: IdentityCommon | null;
+  documents: IdentityDocument[];
+}
+
+/** @deprecated Use IdentityCommon + IdentityDocument instead. */
 export interface IdentityData {
   id?: string;
   user_id?: string;
@@ -240,10 +267,34 @@ export const api = {
   },
 
   vault: {
-    getIdentity: (userId: string): Promise<IdentityData> =>
-      request<{ identity: IdentityData }>(`/v1/identity/${userId}`).then((r) => r.identity),
-    updateIdentity: (userId: string, data: Partial<IdentityData>): Promise<IdentityData> =>
-      request<{ identity: IdentityData }>(`/v1/identity/${userId}`, { method: 'PUT', body: JSON.stringify(data) }).then((r) => r.identity),
+    /** Returns { commonInfo, documents[] } */
+    getIdentity: (userId: string): Promise<IdentityResponse> =>
+      request<IdentityResponse>(`/v1/identity/${userId}`),
+
+    /** Update common personal info (name, DOB, email). */
+    updateCommonInfo: (userId: string, data: Partial<IdentityCommon>): Promise<IdentityCommon | null> =>
+      request<{ commonInfo: IdentityCommon | null }>(`/v1/identity/${userId}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }).then((r) => r.commonInfo),
+
+    /** Add a new government-issued ID document. */
+    addDocument: (userId: string, data: { id_type: string; id_number: string }): Promise<{ id: string; documents: IdentityDocument[] }> =>
+      request<{ id: string; documents: IdentityDocument[] }>(`/v1/identity/${userId}/documents`, {
+        method: 'POST',
+        body: JSON.stringify({ idType: data.id_type, idNumber: data.id_number }),
+      }),
+
+    /** Update an existing identity document. */
+    updateDocument: (userId: string, docId: string, data: { id_type: string; id_number: string }): Promise<IdentityDocument[]> =>
+      request<{ documents: IdentityDocument[] }>(`/v1/identity/${userId}/documents/${docId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ idType: data.id_type, idNumber: data.id_number }),
+      }).then((r) => r.documents),
+
+    /** Remove an identity document. */
+    deleteDocument: (userId: string, docId: string): Promise<void> =>
+      request<void>(`/v1/identity/${userId}/documents/${docId}`, { method: 'DELETE' }),
 
     getAddress: (userId: string): Promise<AddressData> =>
       request<{ address: AddressData }>(`/v1/address/${userId}`).then((r) => r.address),

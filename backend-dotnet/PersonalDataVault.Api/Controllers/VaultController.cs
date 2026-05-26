@@ -32,16 +32,29 @@ public class VaultController(
 
     // ── Identity ──────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Returns common personal info (name/DOB) plus the list of all
+    /// government-issued ID documents for this user.
+    /// </summary>
     [HttpGet("identity/{userId}")]
     public async Task<IActionResult> GetIdentity(string userId)
     {
         if (userId != UserId) return Forbid();
-        var identity = await vault.GetIdentityAsync(userId);
-        return Ok(new { identity = DecryptIdentity(identity) });
+        var common    = await vault.GetCommonIdentityAsync(userId);
+        var documents = await vault.GetIdentityDocumentsAsync(userId);
+        return Ok(new
+        {
+            commonInfo = DecryptCommonIdentity(common),
+            documents  = documents.Select(DecryptDocument).ToList(),
+        });
     }
 
+    /// <summary>
+    /// Update the common personal info (name, date of birth, email).
+    /// Government ID documents are managed via the /documents sub-routes.
+    /// </summary>
     [HttpPut("identity/{userId}")]
-    public async Task<IActionResult> UpdateIdentity(string userId, [FromBody] IdentityRequest req)
+    public async Task<IActionResult> UpdateCommonIdentity(string userId, [FromBody] IdentityCommonRequest req)
     {
         if (userId != UserId) return Forbid();
 
@@ -56,18 +69,77 @@ public class VaultController(
 
         var data = new IdentityData
         {
-            FirstName    = req.FirstName   is not null ? crypto.Encrypt(req.FirstName)   : null,
-            LastName     = req.LastName    is not null ? crypto.Encrypt(req.LastName)    : null,
+            FirstName    = req.FirstName    is not null ? crypto.Encrypt(req.FirstName)    : null,
+            LastName     = req.LastName     is not null ? crypto.Encrypt(req.LastName)     : null,
             EmailPrimary = req.EmailPrimary is not null ? crypto.Encrypt(req.EmailPrimary) : null,
             DateOfBirth  = req.DateOfBirth  is not null ? crypto.Encrypt(req.DateOfBirth)  : null,
-            IdType       = req.IdType       is not null ? crypto.Encrypt(req.IdType)       : null,
-            IdNumber     = req.IdNumber     is not null ? crypto.Encrypt(req.IdNumber)     : null,
         };
-        await vault.UpsertIdentityAsync(userId, data);
-        await audit.InsertEventAsync(null, userId, "ACCESS", "user", userId, new { resource = "identity", action = "update" });
+        await vault.UpsertCommonIdentityAsync(userId, data);
+        await audit.InsertEventAsync(null, userId, "ACCESS", "user", userId,
+            new { resource = "identity", action = "update_common" });
 
-        var updated = await vault.GetIdentityAsync(userId);
-        return Ok(new { identity = DecryptIdentity(updated) });
+        var updated = await vault.GetCommonIdentityAsync(userId);
+        return Ok(new { commonInfo = DecryptCommonIdentity(updated) });
+    }
+
+    /// <summary>Add a new government-issued ID document (Aadhaar, Passport, DL …).</summary>
+    [HttpPost("identity/{userId}/documents")]
+    public async Task<IActionResult> AddIdentityDocument(string userId, [FromBody] IdentityDocumentRequest req)
+    {
+        if (userId != UserId) return Forbid();
+        if (!ModelState.IsValid) return BadRequest(ModelState);
+
+        var data = new IdentityData
+        {
+            IdType   = crypto.Encrypt(req.IdType),
+            IdNumber = crypto.Encrypt(req.IdNumber),
+        };
+        var docId = await vault.AddIdentityDocumentAsync(userId, data);
+        await audit.InsertEventAsync(null, userId, "ACCESS", "user", userId,
+            new { resource = "identity", action = "add_document", idType = req.IdType });
+
+        var documents = await vault.GetIdentityDocumentsAsync(userId);
+        return StatusCode(201, new
+        {
+            id        = docId,
+            documents = documents.Select(DecryptDocument).ToList(),
+        });
+    }
+
+    /// <summary>Update an existing identity document.</summary>
+    [HttpPut("identity/{userId}/documents/{docId}")]
+    public async Task<IActionResult> UpdateIdentityDocument(string userId, string docId, [FromBody] IdentityDocumentRequest req)
+    {
+        if (userId != UserId) return Forbid();
+        if (!ModelState.IsValid) return BadRequest(ModelState);
+
+        var data = new IdentityData
+        {
+            IdType   = crypto.Encrypt(req.IdType),
+            IdNumber = crypto.Encrypt(req.IdNumber),
+        };
+        var found = await vault.UpdateIdentityDocumentAsync(docId, userId, data);
+        if (!found) return NotFound(ApiError.NotFound("Identity document not found.", RequestId));
+
+        await audit.InsertEventAsync(null, userId, "ACCESS", "user", userId,
+            new { resource = "identity", action = "update_document", docId });
+
+        var documents = await vault.GetIdentityDocumentsAsync(userId);
+        return Ok(new { documents = documents.Select(DecryptDocument).ToList() });
+    }
+
+    /// <summary>Delete an identity document.</summary>
+    [HttpDelete("identity/{userId}/documents/{docId}")]
+    public async Task<IActionResult> DeleteIdentityDocument(string userId, string docId)
+    {
+        if (userId != UserId) return Forbid();
+        var removed = await vault.DeleteIdentityDocumentAsync(docId, userId);
+        if (!removed) return NotFound(ApiError.NotFound("Identity document not found.", RequestId));
+
+        await audit.InsertEventAsync(null, userId, "ACCESS", "user", userId,
+            new { resource = "identity", action = "delete_document", docId });
+
+        return Ok(new { message = "Document removed." });
     }
 
     // ── Address ───────────────────────────────────────────────────────────────
@@ -214,7 +286,8 @@ public class VaultController(
         }
     }
 
-    private object? DecryptIdentity(IdentityData? id)
+    /// <summary>Decrypts the common-info record (name / DOB / email).</summary>
+    private object? DecryptCommonIdentity(IdentityData? id)
     {
         if (id is null) return null;
         return new
@@ -224,10 +297,16 @@ public class VaultController(
             LastName     = crypto.Decrypt(id.LastName),
             EmailPrimary = crypto.Decrypt(id.EmailPrimary),
             DateOfBirth  = crypto.Decrypt(id.DateOfBirth),
-            IdType       = crypto.Decrypt(id.IdType),
-            IdNumber     = crypto.Decrypt(id.IdNumber),
         };
     }
+
+    /// <summary>Decrypts a single government-ID document record.</summary>
+    private object DecryptDocument(IdentityData doc) => new
+    {
+        doc.Id, doc.UserId, doc.UpdatedAt,
+        IdType   = crypto.Decrypt(doc.IdType),
+        IdNumber = crypto.Decrypt(doc.IdNumber),
+    };
 
     private object? DecryptContacts(Contact? c)
     {
