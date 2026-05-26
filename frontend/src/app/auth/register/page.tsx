@@ -34,21 +34,24 @@ export default function RegisterPage() {
   return (
     <div className="min-h-dvh flex flex-col bg-[var(--color-bg)]">
       {/* Hero */}
-      <div className="bg-[var(--color-navy)] px-6 pt-14 pb-8 text-center">
+      <div className="bg-[var(--color-navy)] px-6 pt-14 pb-10 text-center relative overflow-hidden">
+        <div className="absolute -top-16 -left-14 w-64 h-64 rounded-full bg-[var(--color-steel)]/25 blur-3xl" />
+        <div className="absolute -top-10 -right-14 w-56 h-56 rounded-full bg-[var(--color-teal)]/22 blur-3xl" />
         <div className="w-14 h-14 rounded-2xl bg-white/15 flex items-center justify-center mx-auto mb-4">
           <svg width="28" height="28" viewBox="0 0 48 48" fill="none">
             <path d="M24 4L8 10V24C8 33.6 15.2 42.4 24 44C32.8 42.4 40 33.6 40 24V10L24 4Z" fill="white" />
           </svg>
         </div>
-        <h1 className="text-white text-[22px] font-bold mb-1">Create your vault</h1>
+        <h1 className="relative text-white text-[24px] font-extrabold mb-1">Create your vault</h1>
         <p className="text-white/65 text-[14px]">Secure. Private. Yours.</p>
       </div>
 
       {/* Form */}
       <form
         onSubmit={handleSubmit}
-        className="flex-1 flex flex-col gap-4 px-6 py-8 w-full max-w-[480px] mx-auto"
+        className="-mt-4 flex-1 flex flex-col gap-4 px-6 py-8 w-full max-w-[480px] mx-auto"
       >
+        <div className="bg-white border border-[var(--color-border)] rounded-[20px] p-5 shadow-[0_8px_20px_rgba(27,58,92,0.08)]">
         <div className="form-group">
           <Label htmlFor="name">Full name</Label>
           <Input
@@ -81,6 +84,7 @@ export default function RegisterPage() {
         <Button type="submit" variant="primary" fullWidth loading={loading} className="mt-2">
           Create Account
         </Button>
+        </div>
 
         <p className="text-center text-[var(--color-text-3)] text-[14px]">
           Already have an account?{' '}

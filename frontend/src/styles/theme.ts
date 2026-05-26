@@ -16,7 +16,6 @@ export const theme = {
     amberLt:  '#FEF3DC',
     red:      '#A32D2D',
     redLt:    '#FDEAEA',
-    purple:   '#7C3AED',
     surface:  '#FFFFFF',
     bg:       '#F5F6F8',
     border:   '#DDDEE9',
@@ -26,7 +25,7 @@ export const theme = {
   },
 
   fonts: {
-    sans: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    sans: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
   },
 
   spacing: {

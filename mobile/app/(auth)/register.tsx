@@ -56,8 +56,10 @@ export default function Register() {
     >
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
-          <Text style={styles.logo}>🔐</Text>
-          <Text style={styles.title}>Create Account</Text>
+          <View style={styles.logoBadge}>
+            <Text style={styles.logoGlyph}>PDV</Text>
+          </View>
+          <Text style={styles.title}>Create Your Vault</Text>
           <Text style={styles.subtitle}>Your data, your control</Text>
         </View>
 
@@ -116,28 +118,42 @@ export default function Register() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: Colors.background },
-  container: { flexGrow: 1, justifyContent: 'center', padding: 24 },
-  header: { alignItems: 'center', marginBottom: 40 },
-  logo: { fontSize: 56, marginBottom: 12 },
-  title: { fontSize: 26, fontWeight: '700', color: Colors.text, marginBottom: 6 },
+  container: { flexGrow: 1, justifyContent: 'center', padding: 24, paddingTop: 56, paddingBottom: 40 },
+  header: { alignItems: 'center', marginBottom: 28 },
+  logoBadge: {
+    width: 64,
+    height: 64,
+    borderRadius: 18,
+    backgroundColor: Colors.accentDark,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  logoGlyph: { color: '#FFFFFF', fontSize: 18, fontWeight: '800', letterSpacing: 0.8 },
+  title: { fontSize: 30, fontWeight: '800', color: Colors.text, marginBottom: 6 },
   subtitle: { fontSize: 14, color: Colors.textSecondary },
   form: {
     backgroundColor: Colors.card,
-    borderRadius: 16,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: Colors.border,
     padding: 20,
+    shadowColor: '#1B3A5C',
+    shadowOpacity: 0.07,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 3,
   },
   errorBanner: {
-    backgroundColor: '#3b1212',
-    borderRadius: 8,
+    backgroundColor: Colors.dangerSoft,
+    borderRadius: 10,
     padding: 10,
     color: Colors.danger,
     fontSize: 13,
     marginBottom: 14,
   },
-  submitBtn: { marginTop: 6 },
-  footer: { flexDirection: 'row', justifyContent: 'center', marginTop: 24 },
+  submitBtn: { marginTop: 8 },
+  footer: { flexDirection: 'row', justifyContent: 'center', marginTop: 22 },
   footerText: { color: Colors.textSecondary, fontSize: 14 },
-  link: { color: Colors.accent, fontSize: 14, fontWeight: '600' },
+  link: { color: Colors.accentDark, fontSize: 14, fontWeight: '700' },
 });

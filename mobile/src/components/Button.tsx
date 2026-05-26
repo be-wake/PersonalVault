@@ -68,15 +68,22 @@ export default function Button({
 
 const styles = StyleSheet.create({
   base: {
-    borderRadius: 10,
+    borderRadius: 14,
+    minHeight: 50,
     paddingVertical: 14,
     paddingHorizontal: 20,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#1B3A5C',
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 2,
   },
   text: {
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
   disabled: {
     opacity: 0.5,

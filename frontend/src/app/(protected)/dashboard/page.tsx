@@ -14,7 +14,7 @@ const VAULT_SECTIONS = [
   { key: 'identity', label: 'Identity', description: 'Name, email, DOB, gov ID', icon: '👤', href: '/vault/identity', color: 'var(--color-blue)' },
   { key: 'address',  label: 'Address',  description: 'Current & history',         icon: '🏠', href: '/vault/address',  color: 'var(--color-teal)' },
   { key: 'cards',    label: 'Payment',  description: 'Saved card references',     icon: '💳', href: '/vault/cards',    color: 'var(--color-amber)' },
-  { key: 'contacts', label: 'Contacts', description: 'Phone & social',            icon: '📞', href: '/vault/contacts', color: '#7C3AED' },
+  { key: 'contacts', label: 'Contacts', description: 'Phone & social',            icon: '📞', href: '/vault/contacts', color: 'var(--color-steel)' },
 ];
 
 export default function DashboardPage() {

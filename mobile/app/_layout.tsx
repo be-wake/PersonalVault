@@ -16,7 +16,7 @@ export default function RootLayout() {
     // C11 — catches render errors anywhere in the tree
     <ErrorBoundary>
       <AuthProvider>
-        <StatusBar style="light" backgroundColor={Colors.background} />
+        <StatusBar style="dark" backgroundColor={Colors.background} />
         <Stack screenOptions={{ headerShown: false }} />
       </AuthProvider>
     </ErrorBoundary>
