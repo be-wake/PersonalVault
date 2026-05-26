@@ -30,6 +30,7 @@ public interface IVaultRepository
 public record VaultBundle(
     IdentityData? Identity,
     Address? Address,
+    List<Address> AddressHistory,
     List<PaymentCard> Payment,
     Contact? Contacts);
 
@@ -165,18 +166,19 @@ public class VaultRepository(AppDbContext db) : IVaultRepository
 
     public async Task<VaultBundle> GetVaultBundleAsync(string userId)
     {
-        var (identity, address, payment, contacts) = await (
+        var (identity, currentAddress, addressHistory, payment, contacts) = await (
             GetIdentityAsync(userId),
             GetCurrentAddressAsync(userId),
+            GetAddressHistoryAsync(userId),
             GetPaymentCardsAsync(userId),
             GetContactsAsync(userId)
         ).WhenAll();
 
-        return new VaultBundle(identity, address, payment, contacts);
+        return new VaultBundle(identity, currentAddress, addressHistory, payment, contacts);
     }
 }
 
-// Helper to await 4 tasks concurrently
+// Helper to await 5 tasks concurrently
 file static class TaskExtensions
 {
     public static async Task<(T1, T2, T3, T4)> WhenAll<T1, T2, T3, T4>(
@@ -184,5 +186,12 @@ file static class TaskExtensions
     {
         await Task.WhenAll(tasks.Item1, tasks.Item2, tasks.Item3, tasks.Item4);
         return (tasks.Item1.Result, tasks.Item2.Result, tasks.Item3.Result, tasks.Item4.Result);
+    }
+
+    public static async Task<(T1, T2, T3, T4, T5)> WhenAll<T1, T2, T3, T4, T5>(
+        this (Task<T1>, Task<T2>, Task<T3>, Task<T4>, Task<T5>) tasks)
+    {
+        await Task.WhenAll(tasks.Item1, tasks.Item2, tasks.Item3, tasks.Item4, tasks.Item5);
+        return (tasks.Item1.Result, tasks.Item2.Result, tasks.Item3.Result, tasks.Item4.Result, tasks.Item5.Result);
     }
 }

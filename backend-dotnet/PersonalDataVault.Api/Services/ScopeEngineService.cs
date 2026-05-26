@@ -11,6 +11,11 @@ public interface IScopeEngineService
 {
     bool IsKnown(string scope);
     (List<string> Allowed, List<DeniedScope> Denied) PartitionByRpAllowlist(List<string> requested, List<string> rpAllowedScopes);
+
+    /// <summary>
+    /// Projects vault data for a set of granted scopes.
+    /// Encrypted string fields (prefixed "v1:") are decrypted automatically.
+    /// </summary>
     Dictionary<string, object?> ProjectForScopes(VaultBundle bundle, List<string> grantedScopes);
 }
 
@@ -80,7 +85,7 @@ public class ScopeEngineService(ICryptoService crypto) : IScopeEngineService
 
     // ── Private helpers ───────────────────────────────────────────────────────
 
-    private static Dictionary<string, object?> BuildDataMap(VaultBundle bundle)
+    private Dictionary<string, object?> BuildDataMap(VaultBundle bundle)
     {
         var map = new Dictionary<string, object?>();
 
@@ -89,6 +94,9 @@ public class ScopeEngineService(ICryptoService crypto) : IScopeEngineService
 
         if (bundle.Address is not null)
             map["address"] = ModelToDict(bundle.Address);
+
+        if (bundle.AddressHistory.Count > 0)
+            map["address_history"] = bundle.AddressHistory.Select(ModelToDict).ToList();
 
         if (bundle.Payment.Count > 0)
             map["payment"] = bundle.Payment.Select(ModelToDict).ToList();
@@ -99,12 +107,23 @@ public class ScopeEngineService(ICryptoService crypto) : IScopeEngineService
         return map;
     }
 
-    private static Dictionary<string, object?> ModelToDict(object model) =>
+    /// <summary>
+    /// Converts a model to a snake_case keyed dictionary.
+    /// String values that are AES-GCM ciphertext (prefixed "v1:") are decrypted
+    /// so RPs receive plaintext. Non-encrypted strings pass through unchanged.
+    /// </summary>
+    private Dictionary<string, object?> ModelToDict(object model) =>
         model.GetType()
              .GetProperties()
              .ToDictionary(
                  p => ToSnakeCase(p.Name),
-                 p => p.GetValue(model));
+                 p =>
+                 {
+                     var val = p.GetValue(model);
+                     // Decrypt any AES-GCM encrypted string; passthrough otherwise
+                     if (val is string s) return (object?)crypto.Decrypt(s);
+                     return val;
+                 });
 
     private Dictionary<string, object?> ProjectRow(Dictionary<string, object?> row, string[] fields, string mask)
     {
@@ -152,9 +171,15 @@ public class ScopeEngineService(ICryptoService crypto) : IScopeEngineService
     private static string ToSnakeCase(string pascal)
     {
         var sb = new System.Text.StringBuilder();
-        foreach (var c in pascal)
+        for (var i = 0; i < pascal.Length; i++)
         {
-            if (char.IsUpper(c) && sb.Length > 0) sb.Append('_');
+            var c    = pascal[i];
+            var prev = i > 0 ? pascal[i - 1] : '\0';
+            // Insert underscore at:  upper-letter boundaries, letter→digit, digit→letter
+            if (i > 0 && (char.IsUpper(c) ||
+                          (char.IsDigit(c) && char.IsLetter(prev)) ||
+                          (char.IsLetter(c) && char.IsDigit(prev))))
+                sb.Append('_');
             sb.Append(char.ToLower(c));
         }
         return sb.ToString();
