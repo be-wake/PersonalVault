@@ -68,7 +68,7 @@ public class AuditController(IAuditRepository audit) : ControllerBase
             "VAULT_ERASE"   => "Vault data erased",
             "WEBHOOK_FAILED" => $"Webhook delivery failed{rp}",
             _               => e.EventType.Replace("_", " ").ToLower() is var s
-                               => char.ToUpper(s[0]) + s[1..],
+                               ? char.ToUpper(s[0]) + s[1..] : e.EventType,
         };
     }
 }

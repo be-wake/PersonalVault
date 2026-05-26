@@ -1,19 +1,20 @@
-# O2 — Lint CI: runs ESLint on backend, Next.js lint on frontend, and Expo ESLint
-# on mobile for every push to main/staging and every pull request targeting them.
+# O2 — Lint / build CI: dotnet build on backend, Next.js lint on frontend,
+# and Expo ESLint on mobile for every push to main/staging and every pull
+# request targeting them.
 name: Lint
 
 on:
   push:
     branches: [main, staging]
     paths:
-      - "backend/**"
+      - "backend-dotnet/**"
       - "frontend/**"
       - "mobile/**"
       - ".github/workflows/lint.yml"
   pull_request:
     branches: [main, staging]
     paths:
-      - "backend/**"
+      - "backend-dotnet/**"
       - "frontend/**"
       - "mobile/**"
       - ".github/workflows/lint.yml"
@@ -35,7 +36,7 @@ jobs:
         with:
           filters: |
             backend:
-              - 'backend/**'
+              - 'backend-dotnet/**'
               - '.github/workflows/lint.yml'
             frontend:
               - 'frontend/**'
@@ -44,31 +45,26 @@ jobs:
               - 'mobile/**'
               - '.github/workflows/lint.yml'
 
-  # ── Backend (Node.js / Express — plain JS) ──────────────────────────────────
-  lint-backend:
-    name: Lint Backend
+  # ── Backend (.NET 8 / ASP.NET Core) ─────────────────────────────────────────
+  build-backend:
+    name: Build Backend (.NET)
     needs: detect-changes
     if: ${{ needs.detect-changes.outputs.backend == 'true' }}
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: backend
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Node 20
-        uses: actions/setup-node@v4
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
         with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: backend/package-lock.json
+          dotnet-version: '8.0.x'
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Restore NuGet packages
+        run: dotnet restore backend-dotnet/PersonalDataVault.sln
 
-      - name: ESLint
-        run: npm run lint
+      - name: Build (no warnings treated as errors in CI)
+        run: dotnet build backend-dotnet/PersonalDataVault.sln --no-restore -c Release
 
   # ── Frontend (Next.js — TypeScript) ─────────────────────────────────────────
   lint-frontend:
