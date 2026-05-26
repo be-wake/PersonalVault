@@ -1,5 +1,5 @@
 # ── Stage 1: build ────────────────────────────────────────────────────────────
-FROM mcr.microsoft.com/devcontainers/javascript-node:20-bookworm AS builder
+FROM mcr.microsoft.com/mirror/docker/library/node:20-alpine AS builder
 
 WORKDIR /app
 
@@ -18,7 +18,7 @@ ENV NODE_ENV=production
 RUN npm run build
 
 # ── Stage 2: runtime ──────────────────────────────────────────────────────────
-FROM mcr.microsoft.com/devcontainers/javascript-node:20-bookworm AS runner
+FROM mcr.microsoft.com/mirror/docker/library/node:20-alpine AS runner
 
 WORKDIR /app
 
