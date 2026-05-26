@@ -4,9 +4,10 @@ using PersonalDataVault.Api.Data.Models;
 namespace PersonalDataVault.Api.Data;
 
 /// <summary>
-/// EF Core context — configured with snake_case naming conventions to match
-/// the PostgreSQL schema created by the original Node.js backend.
-/// UseSnakeCaseNamingConventions() is applied at registration time in Program.cs.
+/// EF Core context. Table and column names are converted to snake_case in
+/// <see cref="OnModelCreating"/> so the .NET model maps transparently to the
+/// PostgreSQL schema created by the original Node.js backend without relying
+/// on the EFCore.NamingConventions external package.
 /// </summary>
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
@@ -89,5 +90,38 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Ignore(a => a.RpName);
             e.Ignore(a => a.RpDomain);
         });
+
+        // ── Apply snake_case naming ────────────────────────────────────────────
+        // Converts all table and column names to snake_case so the EF model
+        // matches the PostgreSQL schema created by the original Node.js backend.
+        // This replaces the EFCore.NamingConventions external package.
+        foreach (var entityType in modelBuilder.Model.GetEntityTypes())
+        {
+            if (entityType.GetTableName() is string tableName)
+                entityType.SetTableName(ToSnakeCase(tableName));
+
+            foreach (var property in entityType.GetProperties())
+                property.SetColumnName(ToSnakeCase(property.Name));
+        }
+    }
+
+    /// <summary>
+    /// Converts PascalCase or camelCase to snake_case.
+    /// Handles letter→digit and digit→letter boundaries (e.g. Last4 → last_4).
+    /// </summary>
+    private static string ToSnakeCase(string name)
+    {
+        var sb = new System.Text.StringBuilder(name.Length + 4);
+        for (var i = 0; i < name.Length; i++)
+        {
+            var c    = name[i];
+            var prev = i > 0 ? name[i - 1] : '\0';
+            if (i > 0 && (char.IsUpper(c) ||
+                          (char.IsDigit(c) && char.IsLetter(prev)) ||
+                          (char.IsLetter(c) && char.IsDigit(prev))))
+                sb.Append('_');
+            sb.Append(char.ToLower(c));
+        }
+        return sb.ToString();
     }
 }

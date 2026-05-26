@@ -53,6 +53,15 @@ desktop.ini
 coverage/
 .nyc_output/
 
+# ── .NET build outputs ────────────────────────────────────────────────────────
+bin/
+obj/
+*.user
+*.suo
+.vs/
+*.nupkg
+*.snupkg
+
 # ── Misc ──────────────────────────────────────────────────────────────────────
 .cache/
 dist/

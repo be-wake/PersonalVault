@@ -48,8 +48,7 @@ try
     builder.Services.AddDbContext<AppDbContext>(opt =>
         opt.UseNpgsql(connStr,
                 npg => npg.CommandTimeout(30)
-                          .EnableRetryOnFailure(3, TimeSpan.FromSeconds(5), null))
-           .UseSnakeCaseNamingConventions());
+                          .EnableRetryOnFailure(3, TimeSpan.FromSeconds(5), null)));
 
     builder.Services.AddTransient<DatabaseInitializer>();
 

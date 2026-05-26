@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using PersonalDataVault.Api.Data;
 using PersonalDataVault.Api.Data.Repositories;
 using PersonalDataVault.Api.Models;

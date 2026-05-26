@@ -131,7 +131,7 @@ public class WebSocketConnectionManager(
 
     // ── Heartbeat ─────────────────────────────────────────────────────────────
 
-    private void Heartbeat(object? _)
+    private void Heartbeat(object? _state)
     {
         foreach (var (userId, bag) in _users)
         {
