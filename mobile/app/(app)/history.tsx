@@ -31,7 +31,8 @@ const EVENT_ICONS: Record<string, string> = {
   REGISTER:        'person-add-outline',
 };
 
-function eventColor(type: string): string {
+function eventColor(type: string | undefined): string {
+  if (!type) return Colors.textSecondary;
   if (type.includes('GRANT'))  return Colors.success;
   if (type.includes('REVOK'))  return Colors.danger;
   if (type.includes('ACCESS')) return Colors.accent;

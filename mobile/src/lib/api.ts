@@ -12,6 +12,9 @@ export const API_URL =
   process.env.EXPO_PUBLIC_API_URL ||
   'https://pdv-api.niceground-cc94fda7.eastus.azurecontainerapps.io';
 
+// Always log which backend the app is talking to — visible in Metro terminal
+log.info(`API_URL = ${API_URL}`);
+
 if (!process.env.EXPO_PUBLIC_API_URL) {
   log.warn('EXPO_PUBLIC_API_URL not set — using deployed default. Set it in eas.json or .env to target a different backend.');
 }

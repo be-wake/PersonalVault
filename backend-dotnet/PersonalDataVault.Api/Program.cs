@@ -318,7 +318,8 @@ try
     });
 
     // Health / readiness probes
-    app.MapGet("/health", () => Results.Ok(new { status = "ok", timestamp = DateTime.UtcNow }));
+    app.MapGet("/health", (IWebHostEnvironment env) =>
+        Results.Ok(new { status = "ok", timestamp = DateTime.UtcNow, environment = env.EnvironmentName }));
     app.MapGet("/ready", async (AppDbContext db) =>
     {
         try
