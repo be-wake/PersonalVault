@@ -1,0 +1,41 @@
+﻿{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Local - Physical Device (USB)",
+      "request": "launch",
+      "type": "dart",
+      "args": [
+        "--dart-define-from-file=dart_defines/local-device.json"
+      ],
+      "flutterMode": "debug"
+    },
+    {
+      "name": "Local - Android Emulator",
+      "request": "launch",
+      "type": "dart",
+      "args": [
+        "--dart-define-from-file=dart_defines/local.json"
+      ],
+      "flutterMode": "debug"
+    },
+    {
+      "name": "Local - iOS Simulator",
+      "request": "launch",
+      "type": "dart",
+      "args": [
+        "--dart-define-from-file=dart_defines/local-ios.json"
+      ],
+      "flutterMode": "debug"
+    },
+    {
+      "name": "Production",
+      "request": "launch",
+      "type": "dart",
+      "args": [
+        "--dart-define-from-file=dart_defines/prod.json"
+      ],
+      "flutterMode": "release"
+    }
+  ]
+}
