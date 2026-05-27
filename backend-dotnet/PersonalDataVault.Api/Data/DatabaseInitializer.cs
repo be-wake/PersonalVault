@@ -107,7 +107,7 @@ public class DatabaseInitializer(AppDbContext db, ILogger<DatabaseInitializer> l
 
             await db.Database.ExecuteSqlRawAsync(
                 @"INSERT INTO relying_parties (id, name, client_id, domain, allowed_scopes, pci_scope, description, client_secret_hash)
-                  VALUES ({0},{1},{2},{3},{4},{5},{6},{7})
+                  VALUES ({0},{1},{2},{3},{4}::jsonb,{5},{6},{7})
                   ON CONFLICT (id) DO UPDATE
                     SET client_secret_hash = EXCLUDED.client_secret_hash
                     WHERE relying_parties.client_secret_hash IS NULL",
