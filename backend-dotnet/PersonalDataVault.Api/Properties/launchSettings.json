@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json.schemastore.org/launchsettings.json",
+  "profiles": {
+    "Development": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "applicationUrl": "http://localhost:5000",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ASPNETCORE_URLS": "http://+:5000",
+        "DATABASE_URL": "postgresql://pdvadmin:devpassword123@localhost:5432/pdv?sslmode=disable",
+        "JWT_SECRET": "local-dev-jwt-secret-change-in-production-111",
+        "JWT_REFRESH_SECRET": "local-dev-refresh-secret-change-in-production-222",
+        "STEPUP_SECRET": "local-dev-stepup-secret-change-in-production-333",
+        "PDV_FIELD_KEK_BASE64": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+        "WEBHOOK_HMAC_SECRET": "local-dev-webhook-secret",
+        "CORS_ORIGINS": "http://localhost:3000,http://localhost:8081,http://10.0.2.2:8081,http://10.0.2.2:5000"
+      }
+    }
+  }
+}
