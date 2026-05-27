@@ -13,10 +13,11 @@ permissions:
   contents: read
 
 env:
-  ACR:     ${{ vars.AZURE_ACR        || 'pdvacrvivekverma' }}
-  RG:      ${{ vars.AZURE_RG         || 'pdv-rg' }}
-  APP:     ${{ vars.BACKEND_APP_NAME || 'pdv-api' }}
-  APP_URL: ${{ vars.BACKEND_URL      || 'https://pdv-api.niceground-cc94fda7.eastus.azurecontainerapps.io' }}
+  ACR:          ${{ vars.AZURE_ACR        || 'pdvacrvivekverma' }}
+  RG:           ${{ vars.AZURE_RG         || 'pdv-rg' }}
+  APP:          ${{ vars.BACKEND_APP_NAME || 'pdv-api' }}
+  APP_URL:      ${{ vars.BACKEND_URL      || 'https://pdv-api.niceground-cc94fda7.eastus.azurecontainerapps.io' }}
+  FRONTEND_URL: ${{ vars.FRONTEND_URL     || 'https://pdv-web.niceground-cc94fda7.eastus.azurecontainerapps.io' }}
 
 jobs:
   deploy:
@@ -57,7 +58,8 @@ jobs:
           az containerapp update \
             --name "$APP" \
             --resource-group "$RG" \
-            --image "$ACR.azurecr.io/pdv-backend:${{ github.sha }}"
+            --image "$ACR.azurecr.io/pdv-backend:${{ github.sha }}" \
+            --set-env-vars "CORS_ORIGINS=$FRONTEND_URL"
 
       - name: Wait for revision to be healthy
         run: |
