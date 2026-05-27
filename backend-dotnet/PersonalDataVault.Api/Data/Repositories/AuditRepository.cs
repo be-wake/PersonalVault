@@ -64,51 +64,56 @@ public class AuditRepository(AppDbContext db) : IAuditRepository
         string actorType, string actorId, object? metadata)
     {
         var id       = Guid.NewGuid().ToString();
-        var ts       = DateTime.UtcNow.ToString("o");
+        var tsUtc    = DateTime.UtcNow;
+        var ts       = tsUtc.ToString("o");   // ISO-8601 string used for the hash chain
         var metaJson = metadata is not null ? JsonSerializer.Serialize(metadata) : null;
 
-        await using var tx = await db.Database.BeginTransactionAsync();
-        try
+        // EnableRetryOnFailure requires all transactions to run inside the execution strategy.
+        return await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         {
-            // Lock the user's latest event to serialise the chain
-            string prevHash;
-            var prevRows = await db.Database
-                .SqlQuery<HashRow>($"SELECT hash FROM audit_events WHERE user_id = {userId} ORDER BY ts DESC, id DESC LIMIT 1 FOR UPDATE")
-                .ToListAsync();
-            prevHash = prevRows.FirstOrDefault()?.Hash ?? "GENESIS";
-
-            // The canonical JSON must match the Node.js format exactly (same key ordering)
-            // so an existing audit chain (if migrating) stays verifiable.
-            var canonical = JsonSerializer.Serialize(new
+            await using var tx = await db.Database.BeginTransactionAsync();
+            try
             {
-                id,
-                grantId = grantId,
-                userId,
-                eventType,
-                actorType,
-                actorId,
-                ts,
-                metadata = metaJson,
-                prevHash,
-            });
-            var hash = Sha256Hex(canonical);
+                // Lock the user's latest event to serialise the chain
+                string prevHash;
+                var prevRows = await db.Database
+                    .SqlQuery<HashRow>($"SELECT hash AS \"Hash\" FROM audit_events WHERE user_id = {userId} ORDER BY ts DESC, id DESC LIMIT 1 FOR UPDATE")
+                    .ToListAsync();
+                prevHash = prevRows.FirstOrDefault()?.Hash ?? "GENESIS";
 
-            await db.Database.ExecuteSqlRawAsync(
-                """
-                INSERT INTO audit_events (id, grant_id, user_id, event_type, actor_type, actor_id, ts, metadata_json, prev_hash, hash)
-                VALUES ({0},{1},{2},{3},{4},{5},{6},{7},{8},{9})
-                """,
-                id, (object?)grantId ?? DBNull.Value, userId, eventType,
-                actorType, actorId, ts, (object?)metaJson ?? DBNull.Value, prevHash, hash);
+                // The canonical JSON must match the Node.js format exactly (same key ordering)
+                // so an existing audit chain (if migrating) stays verifiable.
+                var canonical = JsonSerializer.Serialize(new
+                {
+                    id,
+                    grantId = grantId,
+                    userId,
+                    eventType,
+                    actorType,
+                    actorId,
+                    ts,
+                    metadata = metaJson,
+                    prevHash,
+                });
+                var hash = Sha256Hex(canonical);
 
-            await tx.CommitAsync();
-            return id;
-        }
-        catch
-        {
-            await tx.RollbackAsync();
-            throw;
-        }
+                await db.Database.ExecuteSqlRawAsync(
+                    """
+                    INSERT INTO audit_events (id, grant_id, user_id, event_type, actor_type, actor_id, ts, metadata_json, prev_hash, hash)
+                    VALUES ({0},{1},{2},{3},{4},{5},{6},{7},{8},{9})
+                    """,
+                    id, (object?)grantId, userId, eventType,
+                    actorType, actorId, tsUtc, (object?)metaJson, prevHash, hash);
+
+                await tx.CommitAsync();
+                return id;
+            }
+            catch
+            {
+                await tx.RollbackAsync();
+                throw;
+            }
+        });
     }
 
     public async Task<List<AuditEvent>> GetEventsAsync(string userId, AuditQueryOptions opts)
@@ -118,9 +123,19 @@ public class AuditRepository(AppDbContext db) : IAuditRepository
         // Fetch all (up to 200) then filter in memory — avoids dynamic SQL construction
         var rows = await db.Database
             .SqlQuery<AuditEventRow>($"""
-                SELECT ae.id, ae.grant_id, ae.user_id, ae.event_type, ae.actor_type, ae.actor_id,
-                       ae.ts, ae.metadata_json, ae.prev_hash, ae.hash,
-                       cg.relying_party_id, rp.name AS rp_name, rp.domain AS rp_domain
+                SELECT ae.id            AS "Id",
+                       ae.grant_id      AS "GrantId",
+                       ae.user_id       AS "UserId",
+                       ae.event_type    AS "EventType",
+                       ae.actor_type    AS "ActorType",
+                       ae.actor_id      AS "ActorId",
+                       ae.ts            AS "Ts",
+                       ae.metadata_json AS "MetadataJson",
+                       ae.prev_hash     AS "PrevHash",
+                       ae.hash          AS "Hash",
+                       cg.relying_party_id AS "RelyingPartyId",
+                       rp.name          AS "RpName",
+                       rp.domain        AS "RpDomain"
                 FROM audit_events ae
                 LEFT JOIN consent_grants cg ON ae.grant_id = cg.id
                 LEFT JOIN relying_parties rp ON cg.relying_party_id = rp.id

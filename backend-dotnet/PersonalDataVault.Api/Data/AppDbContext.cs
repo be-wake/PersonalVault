@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using PersonalDataVault.Api.Data.Models;
+using PersonalDataVault.Api.Data.Repositories;
 
 namespace PersonalDataVault.Api.Data;
 
@@ -90,6 +91,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Ignore(a => a.RpName);
             e.Ignore(a => a.RpDomain);
         });
+
+        // ── Raw-SQL projection types (keyless) ────────────────────────────────
+        // Registering these ensures the snake_case loop below converts their
+        // property names so SqlQuery<T> can match columns like expires_at → ExpiresAt.
+        modelBuilder.Entity<GrantRow>().HasNoKey();
+        modelBuilder.Entity<AuditEventRow>().HasNoKey();
+        modelBuilder.Entity<HashRow>().HasNoKey();
 
         // ── Apply snake_case naming ────────────────────────────────────────────
         // Converts all table and column names to snake_case so the EF model

@@ -66,7 +66,7 @@ public class ConsentRepository(AppDbContext db) : IConsentRepository
                 ON CONFLICT (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
                 """,
                 id, userId, relyingPartyId, scopesJson, purpose,
-                (object?)expiresAt ?? DBNull.Value, idempotencyKey);
+                (object?)expiresAt, idempotencyKey);
 
             if (inserted > 0)
                 return (id, true);
@@ -92,10 +92,20 @@ public class ConsentRepository(AppDbContext db) : IConsentRepository
     {
         var rows = await db.Database
             .SqlQuery<GrantRow>($"""
-                SELECT cg.id, cg.user_id, cg.relying_party_id, cg.scopes_json, cg.purpose,
-                       cg.granted_at, cg.expires_at, cg.revoked_at, cg.status, cg.idempotency_key,
-                       rp.name AS rp_name, rp.domain AS rp_domain,
-                       rp.description AS rp_description, rp.pci_scope AS rp_pci_scope
+                SELECT cg.id          AS "Id",
+                       cg.user_id     AS "UserId",
+                       cg.relying_party_id AS "RelyingPartyId",
+                       cg.scopes_json AS "ScopesJson",
+                       cg.purpose     AS "Purpose",
+                       cg.granted_at  AS "GrantedAt",
+                       cg.expires_at  AS "ExpiresAt",
+                       cg.revoked_at  AS "RevokedAt",
+                       cg.status      AS "Status",
+                       cg.idempotency_key AS "IdempotencyKey",
+                       rp.name        AS "RpName",
+                       rp.domain      AS "RpDomain",
+                       rp.description AS "RpDescription",
+                       rp.pci_scope   AS "RpPciScope"
                 FROM consent_grants cg
                 JOIN relying_parties rp ON cg.relying_party_id = rp.id
                 WHERE cg.user_id = {userId}
@@ -111,10 +121,20 @@ public class ConsentRepository(AppDbContext db) : IConsentRepository
     {
         var rows = await db.Database
             .SqlQuery<GrantRow>($"""
-                SELECT cg.id, cg.user_id, cg.relying_party_id, cg.scopes_json, cg.purpose,
-                       cg.granted_at, cg.expires_at, cg.revoked_at, cg.status, cg.idempotency_key,
-                       rp.name AS rp_name, rp.domain AS rp_domain,
-                       rp.description AS rp_description, rp.pci_scope AS rp_pci_scope
+                SELECT cg.id          AS "Id",
+                       cg.user_id     AS "UserId",
+                       cg.relying_party_id AS "RelyingPartyId",
+                       cg.scopes_json AS "ScopesJson",
+                       cg.purpose     AS "Purpose",
+                       cg.granted_at  AS "GrantedAt",
+                       cg.expires_at  AS "ExpiresAt",
+                       cg.revoked_at  AS "RevokedAt",
+                       cg.status      AS "Status",
+                       cg.idempotency_key AS "IdempotencyKey",
+                       rp.name        AS "RpName",
+                       rp.domain      AS "RpDomain",
+                       rp.description AS "RpDescription",
+                       rp.pci_scope   AS "RpPciScope"
                 FROM consent_grants cg
                 JOIN relying_parties rp ON cg.relying_party_id = rp.id
                 WHERE cg.id = {grantId}

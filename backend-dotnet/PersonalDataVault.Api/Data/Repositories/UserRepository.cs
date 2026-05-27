@@ -16,25 +16,29 @@ public class UserRepository(AppDbContext db) : IUserRepository
     {
         var id = Guid.NewGuid().ToString();
 
-        await using var tx = await db.Database.BeginTransactionAsync();
-        try
+        // EnableRetryOnFailure requires all transactions to run inside the execution strategy.
+        return await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         {
-            db.Users.Add(new User { Id = id, Email = email, PasswordHash = passwordHash, Name = name, CreatedAt = DateTime.UtcNow });
-            await db.SaveChangesAsync();
+            await using var tx = await db.Database.BeginTransactionAsync();
+            try
+            {
+                db.Users.Add(new User { Id = id, Email = email, PasswordHash = passwordHash, Name = name, CreatedAt = DateTime.UtcNow });
+                await db.SaveChangesAsync();
 
-            // Create empty vault rows so reads always return a row, not 404
-            db.IdentityData.Add(new IdentityData { Id = Guid.NewGuid().ToString(), UserId = id, EmailPrimary = email, UpdatedAt = DateTime.UtcNow });
-            db.Contacts.Add(new Contact { Id = Guid.NewGuid().ToString(), UserId = id, UpdatedAt = DateTime.UtcNow });
-            await db.SaveChangesAsync();
+                // Create empty vault rows so reads always return a row, not 404
+                db.IdentityData.Add(new IdentityData { Id = Guid.NewGuid().ToString(), UserId = id, EmailPrimary = email, UpdatedAt = DateTime.UtcNow });
+                db.Contacts.Add(new Contact { Id = Guid.NewGuid().ToString(), UserId = id, UpdatedAt = DateTime.UtcNow });
+                await db.SaveChangesAsync();
 
-            await tx.CommitAsync();
-            return id;
-        }
-        catch
-        {
-            await tx.RollbackAsync();
-            throw;
-        }
+                await tx.CommitAsync();
+                return id;
+            }
+            catch
+            {
+                await tx.RollbackAsync();
+                throw;
+            }
+        });
     }
 
     public Task<User?> FindByEmailAsync(string email) =>
