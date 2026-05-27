@@ -45,6 +45,56 @@ try
                   ?? builder.Configuration["DATABASE_URL"]
                   ?? throw new InvalidOperationException("DATABASE_URL is required.");
 
+    // Convert postgresql:// URI → Npgsql key=value string.
+    // Azure Database for PostgreSQL supplies DATABASE_URL as a URI; Npgsql 8+
+    // only accepts key=value. Also skips bare query params like ?sslmode (no
+    // =value) which previously caused KeyNotFoundException inside Npgsql.
+    if (connStr.StartsWith("postgresql://", StringComparison.OrdinalIgnoreCase) ||
+        connStr.StartsWith("postgres://",   StringComparison.OrdinalIgnoreCase))
+    {
+        var uri = new Uri(connStr);
+        var sb  = new System.Text.StringBuilder();
+        sb.Append("Host=").Append(uri.Host);
+        if (uri.Port > 0) sb.Append(";Port=").Append(uri.Port);
+        var dbName = uri.AbsolutePath.TrimStart('/');
+        if (!string.IsNullOrEmpty(dbName)) sb.Append(";Database=").Append(dbName);
+        if (!string.IsNullOrEmpty(uri.UserInfo))
+        {
+            var colon = uri.UserInfo.IndexOf(':');
+            if (colon < 0)
+                sb.Append(";Username=").Append(Uri.UnescapeDataString(uri.UserInfo));
+            else
+            {
+                sb.Append(";Username=").Append(Uri.UnescapeDataString(uri.UserInfo[..colon]));
+                sb.Append(";Password=").Append(Uri.UnescapeDataString(uri.UserInfo[(colon + 1)..]));
+            }
+        }
+        foreach (var pair in uri.Query.TrimStart('?')
+                                 .Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var eq = pair.IndexOf('=');
+            if (eq < 0) continue;   // bare key with no value — skip
+            var k = Uri.UnescapeDataString(pair[..eq]);
+            var v = Uri.UnescapeDataString(pair[(eq + 1)..]);
+            if (string.IsNullOrEmpty(v)) continue;
+            if (k.Equals("sslmode", StringComparison.OrdinalIgnoreCase))
+            {
+                var mode = v.ToLowerInvariant() switch
+                {
+                    "disable"     => "Disable",
+                    "allow"       => "Allow",
+                    "prefer"      => "Prefer",
+                    "require"     => "Require",
+                    "verify-ca"   => "VerifyCA",
+                    "verify-full" => "VerifyFull",
+                    _             => null,
+                };
+                if (mode is not null) sb.Append(";SSL Mode=").Append(mode);
+            }
+        }
+        connStr = sb.ToString();
+    }
+
     builder.Services.AddDbContext<AppDbContext>(opt =>
         opt.UseNpgsql(connStr,
                 npg => npg.CommandTimeout(30)
