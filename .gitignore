@@ -43,7 +43,11 @@ Thumbs.db
 desktop.ini
 
 # ── Editor & IDE ──────────────────────────────────────────────────────────────
-.vscode/
+# Ignore VS Code workspace settings but KEEP launch.json (run configs) and
+# extensions.json (recommended extensions) — both are useful for teammates.
+**/.vscode/*
+!**/.vscode/launch.json
+!**/.vscode/extensions.json
 .idea/
 *.swp
 *.swo
@@ -61,6 +65,16 @@ obj/
 .vs/
 *.nupkg
 *.snupkg
+
+# ── Mobile signing secrets ─────────────────────────────────────────────────────
+# Android — handled in mobile-flutter/android/.gitignore (key.properties, *.jks)
+# iOS
+*.p8
+*.p12
+*.cer
+*.mobileprovision
+*.certSigningRequest
+ExportOptions.plist
 
 # ── Misc ──────────────────────────────────────────────────────────────────────
 .cache/

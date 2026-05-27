@@ -47,6 +47,7 @@ public class AuthController(
         {
             user = new { id = userId, email = req.Email, name = req.Name },
             accessToken,
+            refreshToken,  // included for mobile clients (web uses the HttpOnly cookie)
         });
     }
 
@@ -75,6 +76,7 @@ public class AuthController(
         {
             user = new { id = user.Id, email = user.Email, name = user.Name },
             accessToken,
+            refreshToken,
         });
     }
 

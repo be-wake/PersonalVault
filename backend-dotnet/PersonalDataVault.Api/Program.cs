@@ -10,6 +10,7 @@ using PersonalDataVault.Api.Data.Repositories;
 using PersonalDataVault.Api.Middleware;
 using PersonalDataVault.Api.Services;
 using Serilog;
+using Serilog.Events;
 using Serilog.Formatting.Compact;
 
 // ── Serilog bootstrap ─────────────────────────────────────────────────────────
@@ -20,15 +21,23 @@ Log.Logger = new LoggerConfiguration()
 try
 {
     var builder = WebApplication.CreateBuilder(args);
+    var isDev = builder.Environment.IsDevelopment();
 
     // ── Serilog ───────────────────────────────────────────────────────────────
     builder.Host.UseSerilog((ctx, services, cfg) =>
     {
         cfg.ReadFrom.Configuration(ctx.Configuration)
            .ReadFrom.Services(services)
-           .WriteTo.Console(new CompactJsonFormatter())
            .Enrich.FromLogContext()
            .Enrich.WithProperty("service", "personal-data-vault-api");
+
+        if (isDev)
+            // Human-readable output for local development
+            cfg.WriteTo.Console(
+                outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {SourceContext:l}: {Message:lj}{NewLine}{Exception}");
+        else
+            // Structured JSON for production (Azure Monitor / log aggregators)
+            cfg.WriteTo.Console(new CompactJsonFormatter());
     });
 
     // ── Azure Key Vault (optional — loads secrets into IConfiguration) ─────────
