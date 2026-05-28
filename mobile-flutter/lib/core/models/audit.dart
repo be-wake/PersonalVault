@@ -22,7 +22,7 @@ class AuditEvent {
         eventType: json['eventType'] as String,
         actorType: json['actorType'] as String?,
         timestamp: json['timestamp'] as String,
-        rpName: json['rpName'] as String?,
+        rpName: (json['relyingParty'] as Map<String, dynamic>?)?['name'] as String?,
         label: json['label'] as String?,
         metadata: json['metadata'] as Map<String, dynamic>?,
       );

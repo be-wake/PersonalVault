@@ -149,7 +149,7 @@ class ApiClient {
 
   Future<List<dynamic>> getAddresses(String userId) async {
     final resp = await _dio.get('/v1/address/$userId');
-    return resp.data as List<dynamic>;
+    return (resp.data as Map<String, dynamic>)['addresses'] as List<dynamic>;
   }
 
   Future<Map<String, dynamic>> addAddress(
@@ -175,7 +175,7 @@ class ApiClient {
 
   Future<List<dynamic>> getCards(String userId) async {
     final resp = await _dio.get('/v1/payment/$userId/cards');
-    return resp.data as List<dynamic>;
+    return (resp.data as Map<String, dynamic>)['cards'] as List<dynamic>;
   }
 
   Future<Map<String, dynamic>> addCard(
@@ -192,7 +192,8 @@ class ApiClient {
 
   Future<Map<String, dynamic>> getContacts(String userId) async {
     final resp = await _dio.get('/v1/contacts/$userId');
-    return resp.data as Map<String, dynamic>;
+    final data = resp.data as Map<String, dynamic>;
+    return data['contacts'] as Map<String, dynamic>? ?? {};
   }
 
   Future<void> updateContacts(String userId, Map<String, dynamic> data) async {
@@ -203,13 +204,13 @@ class ApiClient {
 
   Future<List<dynamic>> getConsents(String userId) async {
     final resp = await _dio.get('/v1/consents/$userId');
-    return resp.data as List<dynamic>;
+    return (resp.data as Map<String, dynamic>)['grants'] as List<dynamic>;
   }
 
   Future<Map<String, dynamic>> getConsent(
       String userId, String grantId) async {
     final resp = await _dio.get('/v1/consents/$userId/$grantId');
-    return resp.data as Map<String, dynamic>;
+    return (resp.data as Map<String, dynamic>)['grant'] as Map<String, dynamic>;
   }
 
   Future<Map<String, dynamic>> grantConsent(Map<String, dynamic> data) async {
@@ -225,7 +226,7 @@ class ApiClient {
 
   Future<List<dynamic>> getRelyingParties() async {
     final resp = await _dio.get('/v1/relying-parties');
-    return resp.data as List<dynamic>;
+    return (resp.data as Map<String, dynamic>)['relyingParties'] as List<dynamic>;
   }
 
   // ── Audit ────────────────────────────────────────────────────────────────────
@@ -246,7 +247,7 @@ class ApiClient {
         if (to != null) 'to': to,
       },
     );
-    return resp.data as List<dynamic>;
+    return (resp.data as Map<String, dynamic>)['events'] as List<dynamic>;
   }
 
   // ── Account / GDPR ───────────────────────────────────────────────────────────

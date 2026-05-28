@@ -73,7 +73,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Hello, ${user.name.split(' ').first} ðŸ‘‹',
+                        'Hello, ${user.name.split(' ').first}',
                         style: const TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.w700,
