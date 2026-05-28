@@ -91,6 +91,21 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
+  Future<void> updateName(String name) async {
+    final data = await _api.updateName(name);
+    final newName = data['name'] as String;
+    if (state.user != null) {
+      state = state.copyWith(
+        user: User(
+          id: state.user!.id,
+          email: state.user!.email,
+          name: newName,
+          createdAt: state.user!.createdAt,
+        ),
+      );
+    }
+  }
+
   Future<void> logout() async {
     await _api.clearTokens();
     state = const AuthState();

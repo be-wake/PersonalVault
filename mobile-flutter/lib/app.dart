@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'core/auth/auth_provider.dart';
 import 'core/theme/app_theme.dart';
+import 'core/theme/theme_provider.dart';
 import 'features/auth/sign_in_screen.dart';
 import 'features/auth/register_screen.dart';
 import 'features/dashboard/dashboard_screen.dart';
@@ -194,9 +195,12 @@ class TijoriApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(routerProvider);
+    final themeMode = ref.watch(themeProvider);
     return MaterialApp.router(
       title: 'Tijori',
       theme: AppTheme.light,
+      darkTheme: AppTheme.dark,
+      themeMode: themeMode,
       routerConfig: router,
       debugShowCheckedModeBanner: false,
     );

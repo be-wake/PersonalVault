@@ -23,6 +23,64 @@ class AppColors {
 }
 
 class AppTheme {
+  static ThemeData get dark => ThemeData(
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: AppColors.accent,
+          brightness: Brightness.dark,
+        ),
+        appBarTheme: const AppBarTheme(
+          elevation: 0,
+          scrolledUnderElevation: 1,
+          titleTextStyle: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+          selectedItemColor: AppColors.accent,
+          elevation: 8,
+          type: BottomNavigationBarType.fixed,
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Color(0xFF3A5068)),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: AppColors.accent, width: 2),
+          ),
+          errorBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: AppColors.danger),
+          ),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.accent,
+            foregroundColor: Colors.white,
+            minimumSize: const Size(double.infinity, 50),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14)),
+            textStyle:
+                const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+          ),
+        ),
+        chipTheme: ChipThemeData(
+          selectedColor: AppColors.accent,
+          labelStyle: const TextStyle(fontSize: 13),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        ),
+      );
+
   static ThemeData get light => ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(

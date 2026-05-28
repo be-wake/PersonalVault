@@ -36,3 +36,9 @@ public class StepUpRequest
     [Required]
     public string Intent { get; set; } = null!;
 }
+
+public class UpdateNameRequest
+{
+    [Required, MinLength(1), MaxLength(100)]
+    public string Name { get; set; } = null!;
+}

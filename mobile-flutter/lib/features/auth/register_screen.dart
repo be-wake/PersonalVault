@@ -52,7 +52,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     final error = _localError ?? auth.error;
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,

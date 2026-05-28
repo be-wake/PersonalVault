@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../core/theme/app_theme.dart';
 
 class AppInput extends StatefulWidget {
@@ -11,6 +12,7 @@ class AppInput extends StatefulWidget {
   final TextInputType? keyboardType;
   final ValueChanged<String>? onChanged;
   final String? initialValue;
+  final List<TextInputFormatter>? inputFormatters;
 
   const AppInput({
     super.key,
@@ -23,6 +25,7 @@ class AppInput extends StatefulWidget {
     this.keyboardType,
     this.onChanged,
     this.initialValue,
+    this.inputFormatters,
   });
 
   @override
@@ -60,6 +63,7 @@ class _AppInputState extends State<AppInput> {
           keyboardType: widget.multiline
               ? TextInputType.multiline
               : widget.keyboardType,
+          inputFormatters: widget.inputFormatters,
           onChanged: widget.onChanged,
           selectionControls: MaterialTextSelectionControls(),
           decoration: InputDecoration(

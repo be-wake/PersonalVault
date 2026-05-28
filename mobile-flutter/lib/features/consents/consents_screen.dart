@@ -68,7 +68,7 @@ class _ConsentsScreenState extends ConsumerState<ConsentsScreen> {
     final consentsAsync = ref.watch(_consentsProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+
       appBar: AppBar(
         title: const Text('Consents'),
         actions: [

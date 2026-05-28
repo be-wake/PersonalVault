@@ -8,6 +8,7 @@ public interface IUserRepository
     Task<string> CreateUserAsync(string email, string passwordHash, string name);
     Task<User?> FindByEmailAsync(string email);
     Task<User?> FindByIdAsync(string id);
+    Task UpdateNameAsync(string id, string name);
 }
 
 public class UserRepository(AppDbContext db) : IUserRepository
@@ -49,4 +50,11 @@ public class UserRepository(AppDbContext db) : IUserRepository
           .Where(u => u.Id == id)
           .Select(u => new User { Id = u.Id, Email = u.Email, Name = u.Name, CreatedAt = u.CreatedAt, PasswordHash = string.Empty })
           .FirstOrDefaultAsync();
+
+    public async Task UpdateNameAsync(string id, string name)
+    {
+        await db.Users
+            .Where(u => u.Id == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(u => u.Name, name));
+    }
 }

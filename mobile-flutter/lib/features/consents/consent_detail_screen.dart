@@ -96,7 +96,7 @@ class _ConsentDetailScreenState extends ConsumerState<ConsentDetailScreen> {
     final grantAsync = ref.watch(_consentDetailProvider(widget.grantId));
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+
       appBar: AppBar(title: const Text('Consent Details')),
       body: grantAsync.when(
         loading: () => const LoadingSpinner(message: 'Loading...'),

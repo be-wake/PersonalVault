@@ -59,7 +59,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final dashAsync = ref.watch(_dashboardProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+
       body: SafeArea(
         child: RefreshIndicator(
           color: AppColors.accent,

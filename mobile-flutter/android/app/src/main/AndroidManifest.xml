@@ -1,6 +1,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Network access for API calls and WebSocket -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Camera and media access for identity document images -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <!-- Contacts import -->
+    <uses-permission android:name="android.permission.READ_CONTACTS"/>
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
     <application
         android:label="tijori"
         android:name="${applicationName}"

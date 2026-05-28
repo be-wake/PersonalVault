@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using PersonalDataVault.Api.Data;
 using PersonalDataVault.Api.Data.Repositories;
 using PersonalDataVault.Api.Models;
+using PersonalDataVault.Api.Models.Requests;
 using PersonalDataVault.Api.Services;
 
 namespace PersonalDataVault.Api.Controllers;
@@ -34,6 +35,21 @@ public class AccountController(
     private string RequestId => HttpContext.Items["RequestId"]?.ToString() ?? "unknown";
 
     private static readonly HashSet<string> ValidResources = ["identity", "address", "payment", "contacts"];
+
+    // ── PATCH /v1/account/name ────────────────────────────────────────────────
+
+    [HttpPatch("name")]
+    public async Task<IActionResult> UpdateName([FromBody] UpdateNameRequest req)
+    {
+        if (!ModelState.IsValid) return BadRequest(ModelState);
+
+        var name = req.Name.Trim();
+        if (name.Length == 0 || name.Length > 100)
+            return BadRequest(ApiError.Of("INVALID_NAME", "Name must be 1–100 characters.", RequestId));
+
+        await users.UpdateNameAsync(UserId, name);
+        return Ok(new { name });
+    }
 
     // ── GET /v1/account/export ────────────────────────────────────────────────
 

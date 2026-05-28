@@ -190,14 +190,24 @@ class ApiClient {
 
   // ── Contacts ────────────────────────────────────────────────────────────────
 
-  Future<Map<String, dynamic>> getContacts(String userId) async {
+  Future<List<dynamic>> getContacts(String userId) async {
     final resp = await _dio.get('/v1/contacts/$userId');
-    final data = resp.data as Map<String, dynamic>;
-    return data['contacts'] as Map<String, dynamic>? ?? {};
+    return (resp.data as Map<String, dynamic>)['contacts'] as List<dynamic>;
   }
 
-  Future<void> updateContacts(String userId, Map<String, dynamic> data) async {
-    await _dio.put('/v1/contacts/$userId', data: data);
+  Future<Map<String, dynamic>> addContact(
+      String userId, Map<String, dynamic> data) async {
+    final resp = await _dio.post('/v1/contacts/$userId', data: data);
+    return resp.data as Map<String, dynamic>;
+  }
+
+  Future<void> updateContact(
+      String userId, String contactId, Map<String, dynamic> data) async {
+    await _dio.put('/v1/contacts/$userId/$contactId', data: data);
+  }
+
+  Future<void> deleteContact(String userId, String contactId) async {
+    await _dio.delete('/v1/contacts/$userId/$contactId');
   }
 
   // ── Consents ─────────────────────────────────────────────────────────────────
@@ -251,6 +261,11 @@ class ApiClient {
   }
 
   // ── Account / GDPR ───────────────────────────────────────────────────────────
+
+  Future<Map<String, dynamic>> updateName(String name) async {
+    final resp = await _dio.patch('/v1/account/name', data: {'name': name});
+    return resp.data as Map<String, dynamic>;
+  }
 
   Future<void> exportData() async {
     await _dio.post('/v1/account/export');

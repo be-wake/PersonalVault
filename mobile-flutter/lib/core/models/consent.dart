@@ -66,8 +66,27 @@ class ConsentGrant {
 }
 
 const kScopeLabels = <String, String>{
-  'identity:read': 'Identity',
-  'address:read': 'Address',
-  'payment:read': 'Payment Cards',
-  'contacts:read': 'Contacts',
+  // Broad category scopes
+  'identity:read':    'Identity (all)',
+  'address:read':     'Address (all)',
+  'payment:read':     'Payment Cards (all)',
+  'contacts:read':    'Contacts (all)',
+
+  // Fine-grained identity scopes
+  'identity:name':    'Full Name',
+  'identity:email':   'Email Address',
+  'identity:dob':     'Date of Birth',
+  'identity:gov_id':  'Government ID',
+
+  // Fine-grained address scopes
+  'address:current':  'Current Address',
+  'address:history':  'Address History',
+
+  // Fine-grained payment scopes
+  'payment:card_ref': 'Payment Card',
+
+  // Fine-grained contact scopes
+  'contacts:phone':   'Phone Number',
+  'contacts:email':   'Contact Email',
+  'contacts:all':     'All Contact Info',
 };

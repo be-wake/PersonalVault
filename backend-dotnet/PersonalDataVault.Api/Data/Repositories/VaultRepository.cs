@@ -31,9 +31,12 @@ public interface IVaultRepository
     Task<string> AddPaymentCardAsync(string userId, PaymentCard card);
     Task<bool> RemovePaymentCardAsync(string userId, string cardId);
 
-    // Contacts
+    // Contacts — multiple persons per user
+    Task<List<Contact>> GetAllContactsAsync(string userId);
+    Task<string> AddContactAsync(string userId, Contact data);
+    Task<bool> UpdateContactAsync(string contactId, string userId, Contact data);
+    Task<bool> DeleteContactAsync(string contactId, string userId);
     Task<Contact?> GetContactsAsync(string userId);
-    Task UpsertContactsAsync(string userId, Contact data);
 
     // Full vault bundle for RP reads
     Task<VaultBundle> GetVaultBundleAsync(string userId);
@@ -175,6 +178,7 @@ public class VaultRepository(AppDbContext db) : IVaultRepository
         if (existing is null) return false;
 
         if (data.Type    is not null) existing.Type    = data.Type;
+        if (data.Name    is not null) existing.Name    = data.Name;
         if (data.Line1   is not null) existing.Line1   = data.Line1;
         if (data.Line2   is not null) existing.Line2   = data.Line2;
         if (data.City    is not null) existing.City    = data.City;
@@ -299,32 +303,58 @@ public class VaultRepository(AppDbContext db) : IVaultRepository
 
     // ── Contacts ──────────────────────────────────────────────────────────────
 
-    public Task<Contact?> GetContactsAsync(string userId) =>
-        db.Contacts.FirstOrDefaultAsync(c => c.UserId == userId);
+    public Task<List<Contact>> GetAllContactsAsync(string userId) =>
+        db.Contacts
+          .Where(c => c.UserId == userId)
+          .OrderByDescending(c => c.UpdatedAt)
+          .ToListAsync();
 
-    public async Task UpsertContactsAsync(string userId, Contact data)
+    /// <summary>Most-recently-updated contact; used by the scope/bundle engine.</summary>
+    public Task<Contact?> GetContactsAsync(string userId) =>
+        db.Contacts
+          .Where(c => c.UserId == userId)
+          .OrderByDescending(c => c.UpdatedAt)
+          .FirstOrDefaultAsync();
+
+    public async Task<string> AddContactAsync(string userId, Contact data)
     {
-        var existing = await GetContactsAsync(userId);
-        if (existing is not null)
-        {
-            if (data.PhonePrimary   is not null) existing.PhonePrimary   = data.PhonePrimary;
-            if (data.PhoneType      is not null) existing.PhoneType      = data.PhoneType;
-            if (data.EmailSecondary is not null) existing.EmailSecondary = data.EmailSecondary;
-            if (data.LinkedinUrl    is not null) existing.LinkedinUrl    = data.LinkedinUrl;
-            if (data.TwitterHandle  is not null) existing.TwitterHandle  = data.TwitterHandle;
-            if (data.WebsiteUrl     is not null) existing.WebsiteUrl     = data.WebsiteUrl;
-            existing.UpdatedAt = DateTime.UtcNow;
-            db.Contacts.Update(existing);
-        }
-        else
-        {
-            data.Id = Guid.NewGuid().ToString();
-            data.UserId = userId;
-            data.UpdatedAt = DateTime.UtcNow;
-            db.Contacts.Add(data);
-        }
+        data.Id        = Guid.NewGuid().ToString();
+        data.UserId    = userId;
+        data.UpdatedAt = DateTime.UtcNow;
+        db.Contacts.Add(data);
         await db.SaveChangesAsync();
+        return data.Id;
     }
+
+    public async Task<bool> UpdateContactAsync(string contactId, string userId, Contact data)
+    {
+        var existing = await db.Contacts
+            .FirstOrDefaultAsync(c => c.Id == contactId && c.UserId == userId);
+        if (existing is null) return false;
+
+        existing.Name          = data.Name;           // null clears the field
+        if (data.PhonePrimary   is not null) existing.PhonePrimary   = data.PhonePrimary;
+        if (data.PhoneType      is not null) existing.PhoneType      = data.PhoneType;
+        if (data.EmailSecondary is not null) existing.EmailSecondary = data.EmailSecondary;
+        if (data.LinkedinUrl    is not null) existing.LinkedinUrl    = data.LinkedinUrl;
+        if (data.TwitterHandle  is not null) existing.TwitterHandle  = data.TwitterHandle;
+        if (data.WebsiteUrl     is not null) existing.WebsiteUrl     = data.WebsiteUrl;
+        existing.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<bool> DeleteContactAsync(string contactId, string userId)
+    {
+        var deleted = await db.Contacts
+            .Where(c => c.Id == contactId && c.UserId == userId)
+            .ExecuteDeleteAsync();
+        return deleted > 0;
+    }
+
+    // Kept for backward compatibility (old PUT /contacts/{userId} that still existed)
+    public async Task UpsertContactsAsync(string userId, Contact data)
+        => await AddContactAsync(userId, data);
 
     // ── Bundle ────────────────────────────────────────────────────────────────
 

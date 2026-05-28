@@ -46,8 +46,8 @@ public class IdentityDocumentRequest
 /// </summary>
 public class AddressRequest
 {
-    /// <summary>User-assigned label: home | work | family | other.</summary>
     public string Label { get; set; } = "home";
+    public string? Name { get; set; }
     public string? Line1 { get; set; }
     public string? Line2 { get; set; }
     public string? City { get; set; }
@@ -66,10 +66,13 @@ public class PaymentCardRequest
 
     [Required, RegularExpression(@"^\d{2}/\d{2}$", ErrorMessage = "expiry_mm_yy must be in MM/YY format")]
     public string ExpiryMmYy { get; set; } = null!;
+    public string? Nickname { get; set; }
 }
 
 public class ContactsRequest
 {
+    /// <summary>Display name for this contact (e.g. "Mum", "John Smith").</summary>
+    public string? Name { get; set; }
     public string? PhonePrimary { get; set; }
     public string? PhoneType { get; set; }
     public string? EmailSecondary { get; set; }

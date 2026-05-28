@@ -161,6 +161,7 @@ public class VaultController(
         var data = new Address
         {
             Type    = req.Label,
+            Name    = req.Name,
             Line1   = req.Line1,
             Line2   = req.Line2,
             City    = req.City,
@@ -183,6 +184,7 @@ public class VaultController(
         var data = new Address
         {
             Type    = req.Label,
+            Name    = req.Name,
             Line1   = req.Line1,
             Line2   = req.Line2,
             City    = req.City,
@@ -260,6 +262,7 @@ public class VaultController(
             CardType    = req.CardType.ToLowerInvariant(),
             Last4       = req.Last4,
             ExpiryMmYy  = req.ExpiryMmYy,
+            Nickname    = req.Nickname,
         };
         var id = await vault.AddPaymentCardAsync(userId, card);
         await audit.InsertEventAsync(null, userId, "ACCESS", "user", userId, new { resource = "payment", action = "add" });
@@ -284,28 +287,53 @@ public class VaultController(
     public async Task<IActionResult> GetContacts(string userId)
     {
         if (userId != UserId) return Forbid();
-        var contacts = await vault.GetContactsAsync(userId);
-        return Ok(new { contacts = DecryptContacts(contacts) });
+        var contacts = await vault.GetAllContactsAsync(userId);
+        return Ok(new { contacts = contacts.Select(DecryptContact).ToList() });
     }
 
-    [HttpPut("contacts/{userId}")]
-    public async Task<IActionResult> UpdateContacts(string userId, [FromBody] ContactsRequest req)
+    [HttpPost("contacts/{userId}")]
+    public async Task<IActionResult> AddContact(string userId, [FromBody] ContactsRequest req)
     {
         if (userId != UserId) return Forbid();
-        var data = new Contact
-        {
-            PhonePrimary   = req.PhonePrimary   is not null ? crypto.Encrypt(req.PhonePrimary)   : null,
-            PhoneType      = req.PhoneType,
-            EmailSecondary = req.EmailSecondary  is not null ? crypto.Encrypt(req.EmailSecondary)  : null,
-            LinkedinUrl    = req.LinkedinUrl,
-            TwitterHandle  = req.TwitterHandle,
-            WebsiteUrl     = req.WebsiteUrl,
-        };
-        await vault.UpsertContactsAsync(userId, data);
-        await audit.InsertEventAsync(null, userId, "ACCESS", "user", userId, new { resource = "contacts", action = "update" });
-        var updated = await vault.GetContactsAsync(userId);
-        return Ok(new { contacts = DecryptContacts(updated) });
+        var data = ContactFromRequest(req);
+        var id = await vault.AddContactAsync(userId, data);
+        await audit.InsertEventAsync(null, userId, "ACCESS", "user", userId, new { resource = "contacts", action = "add" });
+        var contacts = await vault.GetAllContactsAsync(userId);
+        return StatusCode(201, new { id, contacts = contacts.Select(DecryptContact).ToList() });
     }
+
+    [HttpPut("contacts/{userId}/{contactId}")]
+    public async Task<IActionResult> UpdateContact(string userId, string contactId, [FromBody] ContactsRequest req)
+    {
+        if (userId != UserId) return Forbid();
+        var data = ContactFromRequest(req);
+        var found = await vault.UpdateContactAsync(contactId, userId, data);
+        if (!found) return NotFound(ApiError.NotFound("Contact not found.", RequestId));
+        await audit.InsertEventAsync(null, userId, "ACCESS", "user", userId, new { resource = "contacts", action = "update", contactId });
+        var contacts = await vault.GetAllContactsAsync(userId);
+        return Ok(new { contacts = contacts.Select(DecryptContact).ToList() });
+    }
+
+    [HttpDelete("contacts/{userId}/{contactId}")]
+    public async Task<IActionResult> DeleteContact(string userId, string contactId)
+    {
+        if (userId != UserId) return Forbid();
+        var removed = await vault.DeleteContactAsync(contactId, userId);
+        if (!removed) return NotFound(ApiError.NotFound("Contact not found.", RequestId));
+        await audit.InsertEventAsync(null, userId, "ACCESS", "user", userId, new { resource = "contacts", action = "delete", contactId });
+        return Ok(new { message = "Contact removed." });
+    }
+
+    private Contact ContactFromRequest(ContactsRequest req) => new Contact
+    {
+        Name           = req.Name,
+        PhonePrimary   = req.PhonePrimary   is not null ? crypto.Encrypt(req.PhonePrimary)   : null,
+        PhoneType      = req.PhoneType,
+        EmailSecondary = req.EmailSecondary is not null ? crypto.Encrypt(req.EmailSecondary) : null,
+        LinkedinUrl    = req.LinkedinUrl,
+        TwitterHandle  = req.TwitterHandle,
+        WebsiteUrl     = req.WebsiteUrl,
+    };
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -360,16 +388,13 @@ public class VaultController(
         IdNumber = crypto.Decrypt(doc.IdNumber),
     };
 
-    private object? DecryptContacts(Contact? c)
+    private object DecryptContact(Contact c) => new
     {
-        if (c is null) return null;
-        return new
-        {
-            c.Id, c.UserId, c.UpdatedAt,
-            PhonePrimary   = crypto.Decrypt(c.PhonePrimary),
-            c.PhoneType,
-            EmailSecondary = crypto.Decrypt(c.EmailSecondary),
-            c.LinkedinUrl, c.TwitterHandle, c.WebsiteUrl,
-        };
-    }
+        c.Id, c.UserId, c.UpdatedAt,
+        c.Name,
+        PhonePrimary   = crypto.Decrypt(c.PhonePrimary),
+        c.PhoneType,
+        EmailSecondary = crypto.Decrypt(c.EmailSecondary),
+        c.LinkedinUrl, c.TwitterHandle, c.WebsiteUrl,
+    };
 }

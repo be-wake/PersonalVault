@@ -49,12 +49,10 @@ class _GrantConsentScreenState extends ConsumerState<GrantConsentScreen> {
     setState(() => _submitting = true);
     try {
       final api = ref.read(apiClientProvider);
-      final userId = ref.read(authProvider).user!.id;
       await api.grantConsent({
-        'relying_party_id': _selectedRp!.id,
+        'relyingPartyId': _selectedRp!.id,
         'scopes': _selectedScopes.toList(),
         'purpose': _purposeCtrl.text.trim(),
-        'user_id': userId,
       });
       if (mounted) context.go('/consents');
     } catch (e) {
@@ -71,7 +69,7 @@ class _GrantConsentScreenState extends ConsumerState<GrantConsentScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+
       appBar: AppBar(
         title: const Text('Grant Access'),
         leading: IconButton(
@@ -84,7 +82,11 @@ class _GrantConsentScreenState extends ConsumerState<GrantConsentScreen> {
       body: Column(
         children: [
           _StepIndicator(current: _step),
-          Expanded(child: _buildStep()),
+          Expanded(
+            child: SingleChildScrollView(
+              child: _buildStep(),
+            ),
+          ),
           Padding(
             padding: const EdgeInsets.all(16),
             child: Row(
@@ -134,7 +136,10 @@ class _GrantConsentScreenState extends ConsumerState<GrantConsentScreen> {
             }
           }),
         ),
-      2 => _StepPurpose(controller: _purposeCtrl),
+      2 => _StepPurpose(
+          controller: _purposeCtrl,
+          onChanged: () => setState(() {}),
+        ),
       _ => const SizedBox(),
     };
   }
@@ -147,49 +152,63 @@ class _StepIndicator extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
       child: Row(
-        children: List.generate(3, (i) {
-          final active = i == current;
-          final done = i < current;
-          return Expanded(
-            child: Row(
-              children: [
-                if (i > 0)
-                  Expanded(
-                    child: Container(
-                      height: 2,
-                      color: done
-                          ? AppColors.accent
-                          : AppColors.border,
-                    ),
-                  ),
-                Container(
-                  width: 28,
-                  height: 28,
-                  decoration: BoxDecoration(
-                    color: active || done
-                        ? AppColors.accent
-                        : AppColors.border,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Center(
-                    child: done
-                        ? const Icon(Icons.check,
-                            color: Colors.white, size: 16)
-                        : Text('${i + 1}',
-                            style: TextStyle(
-                                color: active
-                                    ? Colors.white
-                                    : AppColors.textMuted,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600)),
-                  ),
-                ),
-              ],
+        children: [
+          _StepCircle(index: 0, current: current),
+          Expanded(
+            child: Container(
+              height: 2,
+              color: current > 0 ? AppColors.accent : AppColors.border,
             ),
-          );
-        }),
+          ),
+          _StepCircle(index: 1, current: current),
+          Expanded(
+            child: Container(
+              height: 2,
+              color: current > 1 ? AppColors.accent : AppColors.border,
+            ),
+          ),
+          _StepCircle(index: 2, current: current),
+        ],
+      ),
+    );
+  }
+}
+
+class _StepCircle extends StatelessWidget {
+  final int index;
+  final int current;
+  const _StepCircle({required this.index, required this.current});
+
+  @override
+  Widget build(BuildContext context) {
+    final active = index == current;
+    final done = index < current;
+    return Container(
+      width: 32,
+      height: 32,
+      decoration: BoxDecoration(
+        color: active || done
+            ? AppColors.accent
+            : Theme.of(context).colorScheme.surfaceContainerHighest,
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: active || done ? AppColors.accent : AppColors.border,
+          width: 2,
+        ),
+      ),
+      child: Center(
+        child: done
+            ? const Icon(Icons.check, color: Colors.white, size: 16)
+            : Text(
+                '${index + 1}',
+                style: TextStyle(
+                  color: active ? Colors.white : AppColors.textMuted,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
       ),
     );
   }
@@ -211,6 +230,8 @@ class _StepChooseService extends ConsumerWidget {
       error: (e, _) => Center(child: Text(friendlyError(e))),
       data: (rps) => ListView.separated(
         padding: const EdgeInsets.all(16),
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
         itemCount: rps.length,
         separatorBuilder: (_, __) => const SizedBox(height: 8),
         itemBuilder: (ctx, i) {
@@ -319,7 +340,8 @@ class _StepSelectScopes extends StatelessWidget {
 
 class _StepPurpose extends StatelessWidget {
   final TextEditingController controller;
-  const _StepPurpose({required this.controller});
+  final VoidCallback? onChanged;
+  const _StepPurpose({required this.controller, this.onChanged});
 
   @override
   Widget build(BuildContext context) {
@@ -331,9 +353,15 @@ class _StepPurpose extends StatelessWidget {
           const Text('Why are you granting this access?',
               style: TextStyle(
                   fontSize: 15, color: AppColors.textSecondary)),
+          const SizedBox(height: 8),
+          const Text(
+            'This reason will be visible in your consent history.',
+            style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+          ),
           const SizedBox(height: 16),
           TextField(
             controller: controller,
+            onChanged: (_) => onChanged?.call(),
             maxLines: 5,
             decoration: const InputDecoration(
               hintText: 'e.g. For KYC verification at checkout',

@@ -36,7 +36,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
     final auth = ref.watch(authProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),

@@ -46,6 +46,9 @@ public class DatabaseInitializer(AppDbContext db, ILogger<DatabaseInitializer> l
             "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS website_url     TEXT",
             "ALTER TABLE identity_data DROP CONSTRAINT IF EXISTS identity_data_user_id_key",
             "ALTER TABLE contacts      DROP CONSTRAINT IF EXISTS contacts_user_id_key",
+            "ALTER TABLE addresses     ADD COLUMN IF NOT EXISTS name TEXT",
+            "ALTER TABLE payment_cards ADD COLUMN IF NOT EXISTS nickname TEXT",
+            "ALTER TABLE contacts      ADD COLUMN IF NOT EXISTS name TEXT",
         };
 
         foreach (var sql in migrations)

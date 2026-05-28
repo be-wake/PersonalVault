@@ -1,6 +1,7 @@
 class AddressData {
   final String id;
   final String? label;
+  final String? name;
   final String? line1;
   final String? line2;
   final String? city;
@@ -12,6 +13,7 @@ class AddressData {
   const AddressData({
     required this.id,
     this.label,
+    this.name,
     this.line1,
     this.line2,
     this.city,
@@ -23,7 +25,8 @@ class AddressData {
 
   factory AddressData.fromJson(Map<String, dynamic> json) => AddressData(
         id: json['id'] as String,
-        label: json['label'] as String?,
+        label: json['type'] as String?,
+        name: json['name'] as String?,
         line1: json['line1'] as String?,
         line2: json['line2'] as String?,
         city: json['city'] as String?,
@@ -35,6 +38,7 @@ class AddressData {
 
   Map<String, dynamic> toJson() => {
         if (label != null) 'label': label,
+        if (name != null) 'name': name,
         if (line1 != null) 'line1': line1,
         if (line2 != null) 'line2': line2,
         if (city != null) 'city': city,

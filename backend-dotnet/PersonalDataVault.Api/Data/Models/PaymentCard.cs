@@ -8,5 +8,6 @@ public class PaymentCard
     public string CardType { get; set; } = null!;
     public string Last4 { get; set; } = null!;
     public string ExpiryMmYy { get; set; } = null!;
+    public string? Nickname { get; set; }
     public DateTime CreatedAt { get; set; }
 }

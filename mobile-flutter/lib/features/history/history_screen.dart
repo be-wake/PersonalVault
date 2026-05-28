@@ -60,7 +60,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     final eventsAsync = ref.watch(_historyProvider(_resourceFilter));
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+
       appBar: AppBar(title: const Text('History')),
       body: Column(
         children: [

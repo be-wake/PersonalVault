@@ -1,4 +1,5 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/models/payment.dart';
@@ -9,23 +10,60 @@ import '../../shared/widgets/app_card.dart';
 import '../../shared/widgets/app_input.dart';
 import '../../shared/widgets/loading_spinner.dart';
 
+// ── Expiry formatter ──────────────────────────────────────────────────────────
+// Strips non-digits, then auto-inserts "/" after the 2nd digit.
+// Result is always at most 5 chars: MM/YY.
+
+class _ExpiryFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+      TextEditingValue oldValue, TextEditingValue newValue) {
+    // Keep only digits
+    final digits = newValue.text.replaceAll(RegExp(r'[^\d]'), '');
+    final capped = digits.length > 4 ? digits.substring(0, 4) : digits;
+
+    final String formatted;
+    if (capped.length <= 2) {
+      formatted = capped;
+    } else {
+      formatted = '${capped.substring(0, 2)}/${capped.substring(2)}';
+    }
+
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+    );
+  }
+}
+
+// ── Card visuals ──────────────────────────────────────────────────────────────
+
+const _cardTypes = ['Visa', 'Mastercard', 'Amex', 'Rupay', 'Other'];
+
+const _cardColors = {
+  'visa': Color(0xFF1A1F71),       // Visa deep blue
+  'mastercard': Color(0xFFEB001B), // Mastercard red
+  'amex': Color(0xFF2E77BC),       // Amex blue
+  'rupay': Color(0xFF00529B),      // RuPay blue
+  'other': AppColors.accentDark,
+};
+
+Color _colorFor(String? type) =>
+    _cardColors[(type ?? '').toLowerCase()] ?? AppColors.accentDark;
+
+// ── Provider ──────────────────────────────────────────────────────────────────
+
 final _cardsProvider =
     FutureProvider.autoDispose<List<PaymentCard>>((ref) async {
   final api = ref.watch(apiClientProvider);
   final userId = ref.watch(authProvider).user!.id;
   final data = await api.getCards(userId);
-  return data.map((c) => PaymentCard.fromJson(c as Map<String, dynamic>)).toList();
+  return data
+      .map((c) => PaymentCard.fromJson(c as Map<String, dynamic>))
+      .toList();
 });
 
-const _cardTypes = ['Visa', 'Mastercard', 'Amex', 'Rupay', 'Other'];
-
-const _cardEmoji = {
-  'Visa': 'ðŸ’³',
-  'Mastercard': 'ðŸ”´',
-  'Amex': 'ðŸŸ¦',
-  'Rupay': 'ðŸ‡®ðŸ‡³',
-  'Other': 'ðŸ’³',
-};
+// ── Screen ────────────────────────────────────────────────────────────────────
 
 class CardsScreen extends ConsumerStatefulWidget {
   const CardsScreen({super.key});
@@ -39,6 +77,7 @@ class _CardsScreenState extends ConsumerState<CardsScreen> {
   String _selectedType = _cardTypes.first;
   final _last4 = TextEditingController();
   final _expiry = TextEditingController();
+  final _nickname = TextEditingController();
   bool _saving = false;
   String? _toast;
 
@@ -46,6 +85,7 @@ class _CardsScreenState extends ConsumerState<CardsScreen> {
   void dispose() {
     _last4.dispose();
     _expiry.dispose();
+    _nickname.dispose();
     super.dispose();
   }
 
@@ -54,6 +94,13 @@ class _CardsScreenState extends ConsumerState<CardsScreen> {
     Future.delayed(const Duration(seconds: 3), () {
       if (mounted) setState(() => _toast = null);
     });
+  }
+
+  void _resetForm() {
+    _selectedType = _cardTypes.first;
+    _last4.clear();
+    _expiry.clear();
+    _nickname.clear();
   }
 
   Future<void> _addCard() async {
@@ -73,9 +120,9 @@ class _CardsScreenState extends ConsumerState<CardsScreen> {
         'cardType': _selectedType,
         'last4': _last4.text,
         'expiryMmYy': _expiry.text,
+        if (_nickname.text.trim().isNotEmpty) 'nickname': _nickname.text.trim(),
       });
-      _last4.clear();
-      _expiry.clear();
+      _resetForm();
       setState(() => _showForm = false);
       ref.invalidate(_cardsProvider);
       _showToast('Card added');
@@ -91,6 +138,7 @@ class _CardsScreenState extends ConsumerState<CardsScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Remove card?'),
+        content: const Text('This action cannot be undone.'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
@@ -119,7 +167,7 @@ class _CardsScreenState extends ConsumerState<CardsScreen> {
     final cardsAsync = ref.watch(_cardsProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+
       appBar: AppBar(title: const Text('Payment Cards')),
       body: Stack(
         children: [
@@ -134,6 +182,7 @@ class _CardsScreenState extends ConsumerState<CardsScreen> {
               child: ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
+                  // ── Add form ────────────────────────────────────────────
                   if (_showForm) ...[
                     AppCard(
                       child: Column(
@@ -160,13 +209,24 @@ class _CardsScreenState extends ConsumerState<CardsScreen> {
                             hint: '1234',
                             controller: _last4,
                             keyboardType: TextInputType.number,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                              LengthLimitingTextInputFormatter(4),
+                            ],
                           ),
                           const SizedBox(height: 12),
                           AppInput(
                             label: 'Expiry',
                             hint: 'MM/YY',
                             controller: _expiry,
-                            keyboardType: TextInputType.datetime,
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [_ExpiryFormatter()],
+                          ),
+                          const SizedBox(height: 12),
+                          AppInput(
+                            label: 'Nickname (optional)',
+                            hint: 'e.g. Main HDFC, Travel card',
+                            controller: _nickname,
                           ),
                           const SizedBox(height: 16),
                           Row(children: [
@@ -196,44 +256,16 @@ class _CardsScreenState extends ConsumerState<CardsScreen> {
                         variant: AppButtonVariant.secondary,
                         onPressed: () => setState(() => _showForm = true)),
                   const SizedBox(height: 16),
+
+                  // ── Card list ───────────────────────────────────────────
                   ...cards.map((card) => Padding(
                         padding: const EdgeInsets.only(bottom: 12),
-                        child: AppCard(
-                          child: Row(
-                            children: [
-                              Text(
-                                _cardEmoji[card.cardType] ?? 'ðŸ’³',
-                                style: const TextStyle(fontSize: 28),
-                              ),
-                              const SizedBox(width: 14),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      '${card.cardType ?? 'Card'} Â·Â·Â·Â· ${card.last4}',
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.w600,
-                                          color: AppColors.textPrimary),
-                                    ),
-                                    if (card.expiryMmYy != null)
-                                      Text('Exp ${card.expiryMmYy}',
-                                          style: const TextStyle(
-                                              color: AppColors.textSecondary,
-                                              fontSize: 13)),
-                                  ],
-                                ),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.delete_outline,
-                                    color: AppColors.danger, size: 20),
-                                onPressed: () => _deleteCard(card.id),
-                              ),
-                            ],
-                          ),
+                        child: _CardTile(
+                          card: card,
+                          onDelete: () => _deleteCard(card.id),
                         ),
                       )),
+
                   if (cards.isEmpty && !_showForm)
                     const Center(
                       child: Padding(
@@ -246,6 +278,8 @@ class _CardsScreenState extends ConsumerState<CardsScreen> {
               ),
             ),
           ),
+
+          // ── Toast ──────────────────────────────────────────────────────
           if (_toast != null)
             Positioned(
               bottom: 24,
@@ -266,4 +300,80 @@ class _CardsScreenState extends ConsumerState<CardsScreen> {
       ),
     );
   }
+}
+
+// ── Card tile ─────────────────────────────────────────────────────────────────
+
+class _CardTile extends StatelessWidget {
+  final PaymentCard card;
+  final VoidCallback onDelete;
+
+  const _CardTile({required this.card, required this.onDelete});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _colorFor(card.cardType);
+    final typeName = _capitalise(card.cardType ?? 'Card');
+
+    return AppCard(
+      child: Row(
+        children: [
+          // Coloured icon badge
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(Icons.credit_card, color: color, size: 22),
+          ),
+          const SizedBox(width: 14),
+
+          // Card details
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Nickname or type + masked number
+                Text(
+                  card.nickname != null && card.nickname!.isNotEmpty
+                      ? card.nickname!
+                      : '$typeName •••• ${card.last4}',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 15,
+                    color: color,
+                  ),
+                ),
+                // If nickname shown, show type + number as subtitle
+                if (card.nickname != null && card.nickname!.isNotEmpty)
+                  Text(
+                    '$typeName •••• ${card.last4}',
+                    style: const TextStyle(
+                        fontSize: 13, color: AppColors.textSecondary),
+                  ),
+                if (card.expiryMmYy != null)
+                  Text(
+                    'Exp ${card.expiryMmYy}',
+                    style: const TextStyle(
+                        fontSize: 12, color: AppColors.textMuted),
+                  ),
+              ],
+            ),
+          ),
+
+          // Delete button
+          IconButton(
+            icon: const Icon(Icons.delete_outline,
+                color: AppColors.danger, size: 20),
+            onPressed: onDelete,
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _capitalise(String s) =>
+      s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
 }
