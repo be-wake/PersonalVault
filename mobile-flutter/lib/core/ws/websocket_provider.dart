@@ -57,9 +57,11 @@ class WebSocketNotifier extends StateNotifier<WsState> {
         .replaceFirst('http://', 'ws://');
 
     try {
+      // Backend authenticates the WS upgrade by reading the JWT from a
+      // Sec-WebSocket-Protocol value prefixed with "pdv.token." (RFC 6455).
       _channel = WebSocketChannel.connect(
         Uri.parse('$wsUrl/v1/ws'),
-        protocols: [token],
+        protocols: ['pdv.token.$token'],
       );
       await _channel!.ready;
       state = const WsState(WsStatus.connected);

@@ -189,6 +189,13 @@ class _Tab {
 
 // ── Root app ──────────────────────────────────────────────────────────────────
 
+/// Root-level ScaffoldMessenger key.
+///
+/// Keeping ScaffoldMessenger above the router prevents the
+/// "Looking up a deactivated widget's ancestor is unsafe" assertion that fires
+/// when a SnackBar animation finishes after its route has been popped.
+final scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
+
 class TijoriApp extends ConsumerWidget {
   const TijoriApp({super.key});
 
@@ -201,6 +208,7 @@ class TijoriApp extends ConsumerWidget {
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       themeMode: themeMode,
+      scaffoldMessengerKey: scaffoldMessengerKey,
       routerConfig: router,
       debugShowCheckedModeBanner: false,
     );

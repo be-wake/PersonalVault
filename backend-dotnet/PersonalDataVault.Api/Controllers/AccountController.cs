@@ -105,14 +105,30 @@ public class AccountController(
 
         var userId = UserId;
 
-        // Delete audit events first (no FK cascade)
-        await db.AuditEvents.Where(e => e.UserId == userId).ExecuteDeleteAsync();
-        // users → cascade to identity_data, addresses, payment_cards, contacts, consent_grants
         var user = await db.Users.FindAsync(userId);
         if (user is null)
             return NotFound(ApiError.NotFound("User not found.", RequestId));
-        db.Users.Remove(user);
-        await db.SaveChangesAsync();
+
+        // Erasure must be all-or-nothing: audit rows have no FK cascade from users, so
+        // deleting them and the user in separate commits could orphan one half on a crash.
+        // EnableRetryOnFailure requires the transaction to run inside the execution strategy.
+        await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        {
+            await using var tx = await db.Database.BeginTransactionAsync();
+            try
+            {
+                // Delete audit events first (no FK cascade)
+                await db.AuditEvents.Where(e => e.UserId == userId).ExecuteDeleteAsync();
+                // users → cascade to identity_data, addresses, payment_cards, contacts, consent_grants
+                await db.Users.Where(u => u.Id == userId).ExecuteDeleteAsync();
+                await tx.CommitAsync();
+            }
+            catch
+            {
+                await tx.RollbackAsync();
+                throw;
+            }
+        });
 
         Response.Cookies.Delete("pdv_session");
         Response.Cookies.Delete("pdv_refresh");

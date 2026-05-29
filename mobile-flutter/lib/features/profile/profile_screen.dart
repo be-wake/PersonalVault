@@ -179,7 +179,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       await ref.read(apiClientProvider).exportData();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Export started — check your email')),
+          const SnackBar(content: Text('Your data export is ready')),
         );
       }
     } catch (e) {

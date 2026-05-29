@@ -20,6 +20,11 @@ public class AuthController(
 {
     private int BcryptWorkFactor => config.GetValue<int>("Bcrypt:WorkFactor", 10);
 
+    // Verified against on unknown-email logins so the response time matches the
+    // real-user path, denying an attacker a timing oracle for email enumeration.
+    private static readonly string DummyPasswordHash =
+        BCrypt.Net.BCrypt.HashPassword("timing-equalization-placeholder");
+
     // ── POST /auth/register ───────────────────────────────────────────────────
 
     [HttpPost("register")]
@@ -60,7 +65,10 @@ public class AuthController(
         if (!ModelState.IsValid) return BadRequest(ModelState);
 
         var user = await users.FindByEmailAsync(req.Email);
-        if (user is null || !BCrypt.Net.BCrypt.Verify(req.Password, user.PasswordHash))
+        // Always run a bcrypt verify (against a dummy hash when the email is unknown)
+        // so both branches take the same time — no email-enumeration timing oracle.
+        var passwordOk = BCrypt.Net.BCrypt.Verify(req.Password, user?.PasswordHash ?? DummyPasswordHash);
+        if (user is null || !passwordOk)
         {
             logger.LogWarning("Login failed for {Email}", req.Email);
             return Unauthorized(ApiError.Unauthorized("INVALID_CREDENTIALS", "Incorrect email or password."));

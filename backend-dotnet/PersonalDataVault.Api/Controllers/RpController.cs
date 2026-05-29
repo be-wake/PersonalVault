@@ -39,9 +39,13 @@ public class RpController(
 
         var rp = await relyingParties.FindByClientIdAsync(req.ClientId);
 
-        // Constant-time failure — same response whether client_id or secret is wrong
+        // Compare the secret hashes in constant time so a partial-match doesn't leak via
+        // timing (plain string != short-circuits on the first differing character).
+        var providedHash = crypto.Sha256Hex(req.ClientSecret);
         if (rp is null || string.IsNullOrEmpty(rp.ClientSecretHash)
-            || rp.ClientSecretHash != crypto.Sha256Hex(req.ClientSecret))
+            || !System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
+                   System.Text.Encoding.UTF8.GetBytes(rp.ClientSecretHash),
+                   System.Text.Encoding.UTF8.GetBytes(providedHash)))
         {
             logger.LogWarning("RP token request — invalid client credentials for {ClientId}", req.ClientId);
             return Unauthorized(ApiError.Unauthorized("INVALID_CLIENT", "Invalid client credentials."));

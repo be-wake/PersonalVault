@@ -88,6 +88,7 @@ public class VaultRepository(AppDbContext db) : IVaultRepository
 
     public Task<List<IdentityData>> GetIdentityDocumentsAsync(string userId) =>
         db.IdentityData
+          .AsNoTracking()
           .Where(i => i.UserId == userId && i.IdType != null)
           .OrderBy(i => i.UpdatedAt)
           .ToListAsync();
@@ -129,6 +130,7 @@ public class VaultRepository(AppDbContext db) : IVaultRepository
 
     public Task<List<Address>> GetAllAddressesAsync(string userId) =>
         db.Addresses
+          .AsNoTracking()
           .Where(a => a.UserId == userId)
           .OrderByDescending(a => a.IsCurrent)   // primary first
           .ThenByDescending(a => a.CreatedAt)
@@ -264,11 +266,13 @@ public class VaultRepository(AppDbContext db) : IVaultRepository
     // Kept for VaultBundle / scope engine
     public Task<Address?> GetCurrentAddressAsync(string userId) =>
         db.Addresses
+          .AsNoTracking()
           .Where(a => a.UserId == userId && a.IsCurrent)
           .FirstOrDefaultAsync();
 
     public Task<List<Address>> GetAddressHistoryAsync(string userId) =>
         db.Addresses
+          .AsNoTracking()
           .Where(a => a.UserId == userId)
           .OrderByDescending(a => a.CreatedAt)
           .ToListAsync();
@@ -277,6 +281,7 @@ public class VaultRepository(AppDbContext db) : IVaultRepository
 
     public Task<List<PaymentCard>> GetPaymentCardsAsync(string userId) =>
         db.PaymentCards
+          .AsNoTracking()
           .Where(p => p.UserId == userId)
           .OrderByDescending(p => p.CreatedAt)
           .ToListAsync();
@@ -305,6 +310,7 @@ public class VaultRepository(AppDbContext db) : IVaultRepository
 
     public Task<List<Contact>> GetAllContactsAsync(string userId) =>
         db.Contacts
+          .AsNoTracking()
           .Where(c => c.UserId == userId)
           .OrderByDescending(c => c.UpdatedAt)
           .ToListAsync();
@@ -312,6 +318,7 @@ public class VaultRepository(AppDbContext db) : IVaultRepository
     /// <summary>Most-recently-updated contact; used by the scope/bundle engine.</summary>
     public Task<Contact?> GetContactsAsync(string userId) =>
         db.Contacts
+          .AsNoTracking()
           .Where(c => c.UserId == userId)
           .OrderByDescending(c => c.UpdatedAt)
           .FirstOrDefaultAsync();
@@ -360,40 +367,15 @@ public class VaultRepository(AppDbContext db) : IVaultRepository
 
     public async Task<VaultBundle> GetVaultBundleAsync(string userId)
     {
-        var commonIdentity    = GetCommonIdentityAsync(userId);
-        var identityDocuments = GetIdentityDocumentsAsync(userId);
-        var currentAddress    = GetCurrentAddressAsync(userId);
-        var addressHistory    = GetAddressHistoryAsync(userId);
-        var payment           = GetPaymentCardsAsync(userId);
-        var contacts          = GetContactsAsync(userId);
-
-        await Task.WhenAll(commonIdentity, identityDocuments, currentAddress,
-                           addressHistory, payment, contacts);
-
+        // A DbContext is not thread-safe and does not support concurrent
+        // operations, so these queries must run sequentially on the shared
+        // scoped context (do NOT parallelise with Task.WhenAll here).
         return new VaultBundle(
-            commonIdentity.Result,
-            identityDocuments.Result,
-            currentAddress.Result,
-            addressHistory.Result,
-            payment.Result,
-            contacts.Result);
-    }
-}
-
-// Helper to await 5 tasks concurrently
-file static class TaskExtensions
-{
-    public static async Task<(T1, T2, T3, T4)> WhenAll<T1, T2, T3, T4>(
-        this (Task<T1>, Task<T2>, Task<T3>, Task<T4>) tasks)
-    {
-        await Task.WhenAll(tasks.Item1, tasks.Item2, tasks.Item3, tasks.Item4);
-        return (tasks.Item1.Result, tasks.Item2.Result, tasks.Item3.Result, tasks.Item4.Result);
-    }
-
-    public static async Task<(T1, T2, T3, T4, T5)> WhenAll<T1, T2, T3, T4, T5>(
-        this (Task<T1>, Task<T2>, Task<T3>, Task<T4>, Task<T5>) tasks)
-    {
-        await Task.WhenAll(tasks.Item1, tasks.Item2, tasks.Item3, tasks.Item4, tasks.Item5);
-        return (tasks.Item1.Result, tasks.Item2.Result, tasks.Item3.Result, tasks.Item4.Result, tasks.Item5.Result);
+            await GetCommonIdentityAsync(userId),
+            await GetIdentityDocumentsAsync(userId),
+            await GetCurrentAddressAsync(userId),
+            await GetAddressHistoryAsync(userId),
+            await GetPaymentCardsAsync(userId),
+            await GetContactsAsync(userId));
     }
 }

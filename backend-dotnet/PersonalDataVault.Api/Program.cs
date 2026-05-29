@@ -141,12 +141,31 @@ try
     {
         c.DefaultRequestHeaders.Add("User-Agent", "PersonalDataVault/1.0");
         c.Timeout = TimeSpan.FromSeconds(15);
-    });
+    })
+    // Disable auto-redirects: an RP-controlled endpoint could 302 to an internal
+    // address (cloud metadata, loopback) and defeat the pre-send SSRF URL check.
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 
     // ── Authentication ────────────────────────────────────────────────────────
+    // Resolve the access-token signing secret ONCE so the JwtBearer middleware and
+    // TokenService share the exact same key. Outside development we fail fast on a
+    // missing/weak/placeholder secret; in development we generate a single ephemeral
+    // secret and write it back into configuration so TokenService reads the same one
+    // (never two independent random keys, which would reject every issued token).
     var jwtSecret = Environment.GetEnvironmentVariable("JWT_SECRET")
-                    ?? builder.Configuration["JWT_SECRET"]
-                    ?? Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(48));
+                    ?? builder.Configuration["JWT_SECRET"];
+
+    if (string.IsNullOrEmpty(jwtSecret) || jwtSecret.Length < 16 ||
+        jwtSecret.Contains("change-me", StringComparison.OrdinalIgnoreCase))
+    {
+        if (!isDev)
+            throw new InvalidOperationException(
+                "JWT_SECRET is missing, too short (< 16 chars), or set to a placeholder — refusing to start.");
+
+        jwtSecret = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(48));
+        builder.Configuration["JWT_SECRET"] = jwtSecret;   // share with TokenService
+        Log.Warning("JWT_SECRET not configured — generated an ephemeral dev secret (tokens reset on restart)");
+    }
 
     builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         .AddJwtBearer(opt =>
@@ -349,7 +368,7 @@ try
         await crypto.InitAsync();
 
         var init = scope.ServiceProvider.GetRequiredService<DatabaseInitializer>();
-        await init.InitializeAsync();
+        await init.InitializeAsync(seedDemoRelyingParties: isDev);
     }
 
     // ── Attach in-process webhook listener (dev / memory Service Bus) ─────────

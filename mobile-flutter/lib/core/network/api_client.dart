@@ -267,8 +267,9 @@ class ApiClient {
     return resp.data as Map<String, dynamic>;
   }
 
-  Future<void> exportData() async {
-    await _dio.post('/v1/account/export');
+  Future<Map<String, dynamic>> exportData() async {
+    final resp = await _dio.get('/v1/account/export');
+    return resp.data as Map<String, dynamic>;
   }
 
   Future<void> deleteVaultResource(String resource) async {

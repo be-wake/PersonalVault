@@ -12,7 +12,7 @@ namespace PersonalDataVault.Api.Data;
 /// </summary>
 public class DatabaseInitializer(AppDbContext db, ILogger<DatabaseInitializer> logger)
 {
-    public async Task InitializeAsync()
+    public async Task InitializeAsync(bool seedDemoRelyingParties = false)
     {
         logger.LogInformation("Running database initialisation…");
 
@@ -27,8 +27,13 @@ public class DatabaseInitializer(AppDbContext db, ILogger<DatabaseInitializer> l
         // Indexes
         await CreateIndexesAsync();
 
-        // Seed relying parties
-        await SeedRelyingPartiesAsync();
+        // Seed relying parties. The demo RPs carry predictable, in-repo client
+        // secrets (rp_secret_<id>_dev), so they must NEVER be seeded outside of
+        // local development — otherwise anyone could mint RP tokens in prod.
+        if (seedDemoRelyingParties)
+            await SeedRelyingPartiesAsync();
+        else
+            logger.LogInformation("Skipping demo relying-party seed (non-development environment)");
 
         logger.LogInformation("Database initialisation complete");
     }

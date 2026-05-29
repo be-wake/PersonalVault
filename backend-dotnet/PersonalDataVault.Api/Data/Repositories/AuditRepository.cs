@@ -64,7 +64,12 @@ public class AuditRepository(AppDbContext db) : IAuditRepository
         string actorType, string actorId, object? metadata)
     {
         var id       = Guid.NewGuid().ToString();
+        // Postgres timestamp stores microsecond precision (6 digits); DateTime.UtcNow
+        // carries 100ns ticks (7 digits). Truncate to microseconds BEFORE hashing so the
+        // canonical timestamp round-trips losslessly and VerifyChainAsync recomputes the
+        // same hash from the stored value.
         var tsUtc    = DateTime.UtcNow;
+        tsUtc        = new DateTime(tsUtc.Ticks - (tsUtc.Ticks % TimeSpan.TicksPerMicrosecond), DateTimeKind.Utc);
         var ts       = tsUtc.ToString("o");   // ISO-8601 string used for the hash chain
         var metaJson = metadata is not null ? JsonSerializer.Serialize(metadata) : null;
 
@@ -167,6 +172,7 @@ public class AuditRepository(AppDbContext db) : IAuditRepository
     public async Task<AuditChainResult> VerifyChainAsync(string userId)
     {
         var events = await db.AuditEvents
+            .AsNoTracking()
             .Where(e => e.UserId == userId)
             .OrderBy(e => e.Ts).ThenBy(e => e.Id)
             .ToListAsync();
