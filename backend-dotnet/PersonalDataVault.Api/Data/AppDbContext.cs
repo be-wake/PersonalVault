@@ -20,6 +20,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<RelyingParty> RelyingParties { get; set; } = null!;
     public DbSet<ConsentGrant> ConsentGrants { get; set; } = null!;
     public DbSet<AuditEvent> AuditEvents { get; set; } = null!;
+    public DbSet<RefreshToken> RefreshTokens { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -90,6 +91,16 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Ignore(a => a.RelyingPartyId);
             e.Ignore(a => a.RpName);
             e.Ignore(a => a.RpDomain);
+        });
+
+        // RefreshTokens — server-side revocation/rotation store.
+        // FK cascade so a user's refresh tokens are erased together with the user.
+        modelBuilder.Entity<RefreshToken>(e =>
+        {
+            e.HasKey(t => t.Id);
+            e.HasOne<User>().WithMany().HasForeignKey(t => t.UserId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(t => t.UserId);
+            e.HasIndex(t => t.ExpiresAt);
         });
 
         // ── Raw-SQL projection types (keyless) ────────────────────────────────

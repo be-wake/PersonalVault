@@ -54,6 +54,18 @@ public class DatabaseInitializer(AppDbContext db, ILogger<DatabaseInitializer> l
             "ALTER TABLE addresses     ADD COLUMN IF NOT EXISTS name TEXT",
             "ALTER TABLE payment_cards ADD COLUMN IF NOT EXISTS nickname TEXT",
             "ALTER TABLE contacts      ADD COLUMN IF NOT EXISTS name TEXT",
+            // refresh_tokens — EnsureCreated only builds tables on a brand-new database,
+            // so create it explicitly for existing deployments (server-side token revocation).
+            """
+            CREATE TABLE IF NOT EXISTS refresh_tokens (
+                id              TEXT PRIMARY KEY,
+                user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                created_at      TIMESTAMPTZ NOT NULL,
+                expires_at      TIMESTAMPTZ NOT NULL,
+                revoked_at      TIMESTAMPTZ,
+                replaced_by_jti TEXT
+            )
+            """,
         };
 
         foreach (var sql in migrations)
@@ -73,6 +85,8 @@ public class DatabaseInitializer(AppDbContext db, ILogger<DatabaseInitializer> l
             "CREATE UNIQUE INDEX IF NOT EXISTS uq_consent_idem   ON consent_grants (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL",
             "CREATE INDEX IF NOT EXISTS idx_identity_data_user  ON identity_data (user_id, updated_at DESC)",
             "CREATE INDEX IF NOT EXISTS idx_contacts_user       ON contacts (user_id, updated_at DESC)",
+            "CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user ON refresh_tokens (user_id)",
+            "CREATE INDEX IF NOT EXISTS idx_refresh_tokens_exp  ON refresh_tokens (expires_at)",
         };
 
         foreach (var sql in indexes)

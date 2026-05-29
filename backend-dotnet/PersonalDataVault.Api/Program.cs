@@ -117,6 +117,7 @@ try
     builder.Services.AddScoped<IConsentRepository,      ConsentRepository>();
     builder.Services.AddScoped<IAuditRepository,        AuditRepository>();
     builder.Services.AddScoped<IRelyingPartyRepository, RelyingPartyRepository>();
+    builder.Services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
 
     // ── Services ──────────────────────────────────────────────────────────────
     builder.Services.AddSingleton<ITokenService,          TokenService>();

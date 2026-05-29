@@ -70,8 +70,18 @@ class ApiClient {
     final resp = await refreshDio.post('/auth/refresh', data: {
       'refreshToken': _refreshToken,
     });
+
     _accessToken = resp.data['accessToken'] as String;
     await _storage.write(key: kAccessTokenKey, value: _accessToken);
+
+    // The server rotates the refresh token on every use (single-use tokens with
+    // reuse detection). Persist the new one so the next refresh doesn't replay the
+    // now-revoked token, which would revoke the whole session server-side.
+    final rotated = resp.data['refreshToken'] as String?;
+    if (rotated != null) {
+      _refreshToken = rotated;
+      await _storage.write(key: kRefreshTokenKey, value: rotated);
+    }
   }
 
   Future<void> saveTokens(String access, String refresh) async {
@@ -84,6 +94,18 @@ class ApiClient {
   }
 
   Future<void> clearTokens() async {
+    // Best-effort: tell the server to revoke this refresh token so it can't be
+    // replayed after logout. Never block local sign-out on a network failure.
+    _refreshToken ??= await _storage.read(key: kRefreshTokenKey);
+    if (_refreshToken != null) {
+      try {
+        await Dio(BaseOptions(baseUrl: kApiUrl)).post(
+          '/auth/logout',
+          data: {'refreshToken': _refreshToken},
+        );
+      } catch (_) {/* ignore — clearing locally below is what matters */}
+    }
+
     _accessToken = null;
     _refreshToken = null;
     await Future.wait([
