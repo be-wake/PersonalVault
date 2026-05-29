@@ -3,6 +3,7 @@ using PersonalDataVault.Api.Data.Models;
 
 namespace PersonalDataVault.Api.Data.Repositories;
 
+/// <summary>Read access to the registered relying parties.</summary>
 public interface IRelyingPartyRepository
 {
     Task<List<RelyingParty>> GetAllAsync();

@@ -43,6 +43,7 @@ const _eventColors = <String, Color>{
   'REGISTER': AppColors.success,
 };
 
+/// Displays the user's audit-trail events.
 class HistoryScreen extends ConsumerStatefulWidget {
   const HistoryScreen({super.key});
 

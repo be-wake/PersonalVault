@@ -8,6 +8,10 @@ using PersonalDataVault.Api.Services;
 
 namespace PersonalDataVault.Api.Controllers;
 
+/// <summary>
+/// Manages a user's consent grants: list, fetch, create (with scope validation),
+/// and revoke (cache + event bus + real-time push).
+/// </summary>
 [ApiController]
 [Route("v1/consents")]
 [Authorize]

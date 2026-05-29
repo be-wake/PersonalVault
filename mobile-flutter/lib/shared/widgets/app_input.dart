@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../core/theme/app_theme.dart';
 
+/// Labelled text field with optional password visibility toggle.
 class AppInput extends StatefulWidget {
   final String label;
   final String? hint;

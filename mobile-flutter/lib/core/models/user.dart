@@ -1,3 +1,4 @@
+/// The authenticated account holder.
 class User {
   final String id;
   final String email;

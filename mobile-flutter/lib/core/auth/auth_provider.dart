@@ -26,6 +26,8 @@ final authProvider =
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
+/// Immutable auth state. `isLoading` is true while the session is being
+/// restored from storage on startup.
 class AuthState {
   final User? user;
   final bool isLoading;
@@ -42,6 +44,8 @@ class AuthState {
 
 // ── Notifier ──────────────────────────────────────────────────────────────────
 
+/// Owns the auth lifecycle: restore-on-launch, login, register, and logout,
+/// keeping tokens in [ApiClient] in sync with [AuthState].
 class AuthNotifier extends StateNotifier<AuthState> {
   final ApiClient _api;
 

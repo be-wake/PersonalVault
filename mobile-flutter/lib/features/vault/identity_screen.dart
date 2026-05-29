@@ -81,6 +81,7 @@ Future<void> _deleteImage(String docId, String side) async {
 
 // ── Screen ───────────────────────────────────────────────────────────────────
 
+/// Manages common identity info and government-ID documents.
 class IdentityScreen extends ConsumerStatefulWidget {
   const IdentityScreen({super.key});
 

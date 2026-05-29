@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 
 namespace PersonalDataVault.Api.Models.Requests;
 
+/// <summary>OAuth2-style client-credentials token request for relying parties.</summary>
 public class RpTokenRequest
 {
     [Required]

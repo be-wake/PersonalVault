@@ -2,6 +2,11 @@ using System.Text.Json;
 
 namespace PersonalDataVault.Api.Data.Models;
 
+/// <summary>
+/// consent_grants row. Granted scopes are persisted as a JSON array in
+/// <see cref="ScopesJson"/>; the Rp* properties are JOIN-projected from
+/// relying_parties by read queries and are not mapped columns.
+/// </summary>
 public class ConsentGrant
 {
     public string Id { get; set; } = null!;

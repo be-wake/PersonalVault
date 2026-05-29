@@ -1,3 +1,4 @@
+/// A single entry in the user's tamper-evident audit trail.
 class AuditEvent {
   final String id;
   final String eventType;

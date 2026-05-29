@@ -6,6 +6,7 @@ using PersonalDataVault.Api.Models;
 
 namespace PersonalDataVault.Api.Controllers;
 
+/// <summary>Read access to the caller's audit trail, with optional filtering.</summary>
 [ApiController]
 [Route("v1/audit")]
 [Authorize]

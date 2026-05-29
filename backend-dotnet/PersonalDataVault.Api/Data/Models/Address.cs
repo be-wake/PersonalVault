@@ -1,5 +1,6 @@
 namespace PersonalDataVault.Api.Data.Models;
 
+/// <summary>addresses row. Exactly one address per user has IsCurrent = true (the primary).</summary>
 public class Address
 {
     public string Id { get; set; } = null!;

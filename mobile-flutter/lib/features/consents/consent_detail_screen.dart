@@ -18,6 +18,7 @@ final _consentDetailProvider =
   return ConsentGrant.fromJson(data);
 });
 
+/// Detail view for a single consent grant, with revoke action.
 class ConsentDetailScreen extends ConsumerStatefulWidget {
   final String grantId;
   const ConsentDetailScreen({super.key, required this.grantId});

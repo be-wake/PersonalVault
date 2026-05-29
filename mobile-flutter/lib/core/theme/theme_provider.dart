@@ -4,6 +4,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 const _kThemeKey = 'app_theme_mode';
 
+/// Holds the active [ThemeMode] and persists the user's choice to secure
+/// storage so it survives restarts.
 class ThemeNotifier extends StateNotifier<ThemeMode> {
   final FlutterSecureStorage _storage;
 

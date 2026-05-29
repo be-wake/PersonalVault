@@ -20,6 +20,7 @@ Future<File> _profilePhotoFile() async {
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
+/// Profile screen: name edit, theme toggle, data export, account deletion, logout.
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
 

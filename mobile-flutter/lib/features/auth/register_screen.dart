@@ -6,6 +6,7 @@ import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/app_input.dart';
 
+/// New-account registration screen.
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
 

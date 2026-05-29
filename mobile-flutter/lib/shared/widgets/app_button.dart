@@ -3,6 +3,7 @@ import '../../core/theme/app_theme.dart';
 
 enum AppButtonVariant { primary, secondary, danger, ghost }
 
+/// App-styled button with variants and a built-in loading spinner state.
 class AppButton extends StatelessWidget {
   final String title;
   final VoidCallback? onPressed;

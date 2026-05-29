@@ -21,6 +21,8 @@ import 'shared/widgets/loading_spinner.dart';
 
 // ── Router notifier ───────────────────────────────────────────────────────────
 
+/// Drives go_router redirects from auth state: rebuilds routes when the user
+/// signs in/out and gates protected routes behind authentication.
 class _RouterNotifier extends ChangeNotifier {
   final Ref _ref;
 
@@ -196,6 +198,7 @@ class _Tab {
 /// when a SnackBar animation finishes after its route has been popped.
 final scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
 
+/// Root widget: wires up theming and the go_router configuration.
 class TijoriApp extends ConsumerWidget {
   const TijoriApp({super.key});
 

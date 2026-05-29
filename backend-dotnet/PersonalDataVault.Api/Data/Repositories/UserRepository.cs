@@ -3,6 +3,7 @@ using PersonalDataVault.Api.Data.Models;
 
 namespace PersonalDataVault.Api.Data.Repositories;
 
+/// <summary>User account persistence (lookup, creation with seeded vault rows, rename).</summary>
 public interface IUserRepository
 {
     Task<string> CreateUserAsync(string email, string passwordHash, string name);

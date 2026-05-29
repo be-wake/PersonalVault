@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/app_card.dart';
 
+/// Vault landing screen linking to identity, address, cards, and contacts.
 class VaultHomeScreen extends StatelessWidget {
   const VaultHomeScreen({super.key});
 

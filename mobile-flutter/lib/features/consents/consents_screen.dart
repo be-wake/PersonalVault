@@ -19,6 +19,7 @@ final _consentsProvider =
       .toList();
 });
 
+/// Lists the user's consent grants by status.
 class ConsentsScreen extends ConsumerStatefulWidget {
   const ConsentsScreen({super.key});
 

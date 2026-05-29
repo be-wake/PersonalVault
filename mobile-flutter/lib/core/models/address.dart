@@ -1,3 +1,4 @@
+/// A saved address. `isCurrent` marks the user's primary address.
 class AddressData {
   final String id;
   final String? label;
@@ -25,7 +26,7 @@ class AddressData {
 
   factory AddressData.fromJson(Map<String, dynamic> json) => AddressData(
         id: json['id'] as String,
-        label: json['type'] as String?,
+        label: json['type'] as String?,   // backend names the label field "type"
         name: json['name'] as String?,
         line1: json['line1'] as String?,
         line2: json['line2'] as String?,

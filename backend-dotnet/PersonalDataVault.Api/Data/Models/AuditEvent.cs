@@ -1,5 +1,9 @@
 namespace PersonalDataVault.Api.Data.Models;
 
+/// <summary>
+/// audit_events row in the per-user hash chain: each row's <see cref="Hash"/> =
+/// SHA-256(<see cref="PrevHash"/> || canonical(event)), making tampering detectable.
+/// </summary>
 public class AuditEvent
 {
     public string Id { get; set; } = null!;

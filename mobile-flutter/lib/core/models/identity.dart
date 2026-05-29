@@ -1,3 +1,4 @@
+/// A single government-issued ID document (type + number).
 class IdentityDocument {
   final String id;
   final String idType;
@@ -24,6 +25,7 @@ class IdentityDocument {
       };
 }
 
+/// Common personal info (name / DOB / email) plus the user's ID documents.
 class IdentityData {
   final String? firstName;
   final String? lastName;

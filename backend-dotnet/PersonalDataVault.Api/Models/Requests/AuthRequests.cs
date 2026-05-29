@@ -2,6 +2,8 @@ using System.ComponentModel.DataAnnotations;
 
 namespace PersonalDataVault.Api.Models.Requests;
 
+// Request DTOs for the /auth endpoints (register, login, refresh, step-up, name update).
+
 public class RegisterRequest
 {
     [Required, EmailAddress, MaxLength(254)]

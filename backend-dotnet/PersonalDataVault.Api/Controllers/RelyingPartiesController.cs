@@ -5,6 +5,7 @@ using PersonalDataVault.Api.Models;
 
 namespace PersonalDataVault.Api.Controllers;
 
+/// <summary>Lists the relying parties a user can grant access to.</summary>
 [ApiController]
 [Route("v1/relying-parties")]
 [Authorize]

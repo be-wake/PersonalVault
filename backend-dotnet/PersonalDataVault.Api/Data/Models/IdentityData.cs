@@ -1,5 +1,10 @@
 namespace PersonalDataVault.Api.Data.Models;
 
+/// <summary>
+/// identity_data row. A row with <see cref="IdType"/> == null is the user's
+/// "common" info (name / DOB / email); rows with IdType set are individual
+/// government-issued ID documents. Sensitive fields are stored encrypted.
+/// </summary>
 public class IdentityData
 {
     public string Id { get; set; } = null!;

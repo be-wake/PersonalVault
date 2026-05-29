@@ -6,6 +6,7 @@ import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/app_input.dart';
 
+/// Email/password sign-in screen.
 class SignInScreen extends ConsumerStatefulWidget {
   const SignInScreen({super.key});
 

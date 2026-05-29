@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+/// Centralized color palette used across the app's light and dark themes.
 class AppColors {
   static const accent = Color(0xFF196699);
   static const accentDark = Color(0xFF1B3A5C);
@@ -22,6 +23,7 @@ class AppColors {
   static const warningSoft = Color(0xFFFFF8E6);
 }
 
+/// Builds the app's light and dark [ThemeData] from [AppColors].
 class AppTheme {
   static ThemeData get dark => ThemeData(
         useMaterial3: true,

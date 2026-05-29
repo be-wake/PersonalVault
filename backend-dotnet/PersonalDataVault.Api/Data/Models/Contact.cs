@@ -1,5 +1,6 @@
 namespace PersonalDataVault.Api.Data.Models;
 
+/// <summary>contacts row. Phone/email fields are stored encrypted.</summary>
 public class Contact
 {
     public string Id { get; set; } = null!;

@@ -2,6 +2,11 @@ using System.Text.Json;
 
 namespace PersonalDataVault.Api.Data.Models;
 
+/// <summary>
+/// relying_parties row: a third-party client that can request vault access via
+/// client-credentials. <see cref="AllowedScopes"/> is a JSON array bounding what
+/// it may ever be granted.
+/// </summary>
 public class RelyingParty
 {
     public string Id { get; set; } = null!;

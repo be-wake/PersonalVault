@@ -1,3 +1,4 @@
+/// A stored payment card. Only the last 4 digits are kept client-side.
 class PaymentCard {
   final String id;
   final String? cardType;

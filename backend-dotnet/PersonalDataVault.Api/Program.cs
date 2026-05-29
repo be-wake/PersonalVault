@@ -1,3 +1,6 @@
+// Application composition root: configures logging, auth, rate limiting, CORS,
+// EF Core/Postgres, DI registrations, the middleware pipeline, and WebSockets,
+// then runs database initialisation before starting the host.
 using System.Security.Claims;
 using System.Text;
 using Azure.Identity;

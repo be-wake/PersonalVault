@@ -67,6 +67,7 @@ final _cardsProvider =
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
+/// Manages the user's saved payment cards.
 class CardsScreen extends ConsumerStatefulWidget {
   const CardsScreen({super.key});
 

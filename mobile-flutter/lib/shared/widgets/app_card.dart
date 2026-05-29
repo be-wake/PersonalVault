@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+/// Rounded surface container with theme-aware border/shadow and optional tap.
 class AppCard extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry? padding;

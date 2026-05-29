@@ -1,3 +1,4 @@
+/// A saved contact (name + primary phone/email).
 class ContactPerson {
   final String id;
   final String? name;

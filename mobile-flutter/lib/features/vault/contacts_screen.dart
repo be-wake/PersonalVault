@@ -28,6 +28,7 @@ const _phoneTypes = ['Mobile', 'Home', 'Work', 'Other'];
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
+/// Manages saved contacts, including import from the device address book.
 class ContactsScreen extends ConsumerStatefulWidget {
   const ContactsScreen({super.key});
 

@@ -16,6 +16,7 @@ final _dashboardProvider = FutureProvider.autoDispose<Map<String, dynamic>>((ref
   return api.getDashboardStats(userId);
 });
 
+/// Home dashboard: active-consent count and recent activity summary.
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
 

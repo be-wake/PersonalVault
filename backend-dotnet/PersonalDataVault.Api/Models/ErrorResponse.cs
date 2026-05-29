@@ -9,6 +9,7 @@ public record ErrorDetail(
     string? Timestamp = null,
     object? Issues = null);
 
+/// <summary>Factory helpers for the standard <see cref="ErrorEnvelope"/> JSON error shape.</summary>
 public static class ApiError
 {
     public static ErrorEnvelope Of(string code, string message, string? requestId = null) =>

@@ -1,3 +1,4 @@
+/// A third-party service (relying party) that can request access to vault data.
 class RelyingParty {
   final String id;
   final String name;
@@ -21,6 +22,8 @@ class RelyingParty {
       );
 }
 
+/// A consent grant: the scopes a user has authorized a relying party to access,
+/// plus its lifecycle status (ACTIVE / REVOKED / EXPIRED).
 class ConsentGrant {
   final String id;
   final String relyingPartyId;
@@ -65,6 +68,7 @@ class ConsentGrant {
       );
 }
 
+/// Maps backend scope identifiers to human-readable labels shown in the UI.
 const kScopeLabels = <String, String>{
   // Broad category scopes
   'identity:read':    'Identity (all)',

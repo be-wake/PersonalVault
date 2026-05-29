@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 
+/// Centered progress indicator with an optional caption.
 class LoadingSpinner extends StatelessWidget {
   final String? message;
 

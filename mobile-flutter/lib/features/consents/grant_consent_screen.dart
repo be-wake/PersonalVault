@@ -17,6 +17,7 @@ final _relyingPartiesProvider =
       .toList();
 });
 
+/// Flow for granting a relying party access to selected scopes.
 class GrantConsentScreen extends ConsumerStatefulWidget {
   const GrantConsentScreen({super.key});
 

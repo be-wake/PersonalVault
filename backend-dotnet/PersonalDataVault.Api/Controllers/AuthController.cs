@@ -10,6 +10,10 @@ using PersonalDataVault.Api.Services;
 
 namespace PersonalDataVault.Api.Controllers;
 
+/// <summary>
+/// Authentication endpoints: register, login, token refresh (with rotation),
+/// logout, current user, and step-up re-authentication.
+/// </summary>
 [ApiController]
 [Route("auth")]
 public class AuthController(

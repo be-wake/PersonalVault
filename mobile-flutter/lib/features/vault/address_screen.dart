@@ -23,6 +23,7 @@ final _addressesProvider =
 
 const _labels = ['Home', 'Work', 'Family', 'Other'];
 
+/// Manages the user's saved addresses and which one is primary.
 class AddressScreen extends ConsumerStatefulWidget {
   const AddressScreen({super.key});
 

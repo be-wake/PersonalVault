@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace PersonalDataVault.Api.Models.Requests;
 
+/// <summary>Batch of client-side log entries posted to the telemetry endpoint.</summary>
 public class LogBatchRequest
 {
     [Required]

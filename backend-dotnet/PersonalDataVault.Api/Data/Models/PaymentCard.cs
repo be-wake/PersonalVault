@@ -1,5 +1,9 @@
 namespace PersonalDataVault.Api.Data.Models;
 
+/// <summary>
+/// payment_cards row. Stores only a network token plus the last four digits and
+/// expiry — never the full PAN.
+/// </summary>
 public class PaymentCard
 {
     public string Id { get; set; } = null!;
