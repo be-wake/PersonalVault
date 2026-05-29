@@ -1,21 +1,26 @@
 name: Build Android App
 
 # Triggers:
-#   1. Manual run — choose any profile (development / preview / production)
-#   2. Version tag   e.g. git tag v1.0.0 && git push --tags → production AAB
+#   1. Manual run — choose Android artifact type (apk / aab)
+#   2. Push to main with changes under mobile-flutter/
+#   3. Version tag   e.g. git tag v1.0.0 && git push --tags → release AAB
 on:
   workflow_dispatch:
     inputs:
-      profile:
-        description: 'EAS build profile'
+      artifact:
+        description: 'Android artifact to build'
         required: true
-        default: 'preview'
+        default: 'apk'
         type: choice
         options:
-          - development
-          - preview
-          - production
+          - apk
+          - aab
   push:
+    branches:
+      - main
+    paths:
+      - "mobile-flutter/**"
+      - ".github/workflows/mobile.yml"
     tags:
       - 'v*.*.*'
 
@@ -24,49 +29,60 @@ permissions:
 
 jobs:
   build:
-    name: EAS Android Build
+    name: Flutter Android Build
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: mobile
+        working-directory: mobile-flutter
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Node.js 20
-        uses: actions/setup-node@v4
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
         with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: mobile/package-lock.json
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Flutter (stable)
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
 
       - name: Install dependencies
-        run: npm ci --legacy-peer-deps
+        run: flutter pub get
 
-      - name: Set up EAS CLI
-        uses: expo/expo-github-action@v8
-        with:
-          eas-version: latest
-          token: ${{ secrets.EXPO_TOKEN }}
-
-      # On a version tag → production AAB for Play Store
-      # On workflow_dispatch → whatever profile was chosen
-      - name: Resolve build profile
-        id: profile
+      - name: Resolve artifact type
+        id: artifact
         run: |
           if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            echo "profile=production" >> $GITHUB_OUTPUT
+            echo "type=aab" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "type=${{ github.event.inputs.artifact }}" >> $GITHUB_OUTPUT
           else
-            echo "profile=${{ github.event.inputs.profile }}" >> $GITHUB_OUTPUT
+            echo "type=apk" >> $GITHUB_OUTPUT
           fi
 
-      - name: Run EAS Build
-        run: eas build --platform android --profile ${{ steps.profile.outputs.profile }} --non-interactive
+      - name: Build APK
+        if: ${{ steps.artifact.outputs.type == 'apk' }}
+        run: flutter build apk --release
 
-      - name: Submit to Play Store
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: |
-          # Uncomment once google-service-account.json is uploaded as an EAS secret:
-          # eas submit --platform android --profile production --non-interactive
-          echo "Build done. To submit: eas submit --platform android --profile production"
+      - name: Build App Bundle (AAB)
+        if: ${{ steps.artifact.outputs.type == 'aab' }}
+        run: flutter build appbundle --release
+
+      - name: Upload APK artifact
+        if: ${{ steps.artifact.outputs.type == 'apk' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: mobile-flutter/build/app/outputs/flutter-apk/*.apk
+
+      - name: Upload AAB artifact
+        if: ${{ steps.artifact.outputs.type == 'aab' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-aab
+          path: mobile-flutter/build/app/outputs/bundle/release/*.aab

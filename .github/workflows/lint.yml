@@ -1,6 +1,6 @@
 # O2 — Lint / build CI: dotnet build on backend, Next.js lint on frontend,
-# and Expo ESLint on mobile for every push to main/staging and every pull
-# request targeting them.
+# and Flutter analyze on mobile-flutter for every push to main/staging and
+# every pull request targeting them.
 name: Lint
 
 on:
@@ -9,14 +9,14 @@ on:
     paths:
       - "backend-dotnet/**"
       - "frontend/**"
-      - "mobile/**"
+      - "mobile-flutter/**"
       - ".github/workflows/lint.yml"
   pull_request:
     branches: [main, staging]
     paths:
       - "backend-dotnet/**"
       - "frontend/**"
-      - "mobile/**"
+      - "mobile-flutter/**"
       - ".github/workflows/lint.yml"
 
 jobs:
@@ -42,7 +42,7 @@ jobs:
               - 'frontend/**'
               - '.github/workflows/lint.yml'
             mobile:
-              - 'mobile/**'
+              - 'mobile-flutter/**'
               - '.github/workflows/lint.yml'
 
   # ── Backend (.NET 8 / ASP.NET Core) ─────────────────────────────────────────
@@ -92,29 +92,27 @@ jobs:
       - name: Next.js lint
         run: npm run lint
 
-  # ── Mobile (Expo SDK 54 / React Native — TypeScript) ────────────────────────
-  lint-mobile:
-    name: Lint Mobile
+  # ── Mobile (Flutter — Dart) ─────────────────────────────────────────────────
+  analyze-mobile:
+    name: Analyze Mobile (Flutter)
     needs: detect-changes
     if: ${{ needs.detect-changes.outputs.mobile == 'true' }}
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: mobile
+        working-directory: mobile-flutter
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Node 20
-        uses: actions/setup-node@v4
+      - name: Set up Flutter (stable)
+        uses: subosito/flutter-action@v2
         with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: mobile/package-lock.json
+          channel: stable
+          cache: true
 
       - name: Install dependencies
-        # legacy-peer-deps mirrors .npmrc so optional peer-dep conflicts are skipped
-        run: npm ci --legacy-peer-deps
+        run: flutter pub get
 
-      - name: ESLint (Expo)
-        run: npm run lint
+      - name: Flutter analyze
+        run: flutter analyze

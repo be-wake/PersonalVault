@@ -12,7 +12,7 @@ A privacy-first platform that lets users **own and control their personal data**
 personal-data-vault/
 ├── backend/          Node.js / Express API + WebSocket server
 ├── frontend/         Next.js 16 web app (mobile-first PWA)
-├── mobile/           Expo SDK 54 / React Native Android app
+├── mobile-flutter/   Flutter app
 ├── infra/            Azure Bicep IaC (Container Apps + ACR + Postgres + Key Vault)
 └── .github/
     ├── workflows/    CI/CD pipelines (backend, frontend, mobile, infra, lint)
@@ -66,7 +66,7 @@ personal-data-vault/
 | Node.js | 20 LTS |
 | npm | 10+ |
 | Docker | For local Postgres (or install Postgres 15+) |
-| Expo CLI | via `npx expo` (no global install needed) |
+| Flutter SDK | stable channel |
 
 ---
 
@@ -103,10 +103,9 @@ npm run dev                   # starts on http://localhost:3000
 ### 4 — Mobile
 
 ```bash
-cd mobile
-cp .env.example .env
-npm install --legacy-peer-deps
-npx expo start                # scan QR with Expo Go, or press 'a' for Android emulator
+cd mobile-flutter
+flutter pub get
+flutter run -d android        # run on Android emulator/device
 ```
 
 ---
@@ -120,7 +119,7 @@ npx expo start                # scan QR with Expo Go, or press 'a' for Android e
 | `frontend.yml` | Push to `main` → `frontend/**` | `az acr build` → `az containerapp update` (production) |
 | `backend-staging.yml` | Push to `staging` → `backend/**` | Migrate staging DB → build + deploy to `pdv-api-staging` |
 | `frontend-staging.yml` | Push to `staging` → `frontend/**` | Build + deploy to `pdv-web-staging` |
-| `mobile.yml` | Push to `main` → `mobile/**` | `eas build --profile production` |
+| `mobile.yml` | Push to `main` → `mobile-flutter/**` | `flutter build apk` / `flutter build appbundle` |
 | `infra.yml` | Manual dispatch | `az deployment group create` (Bicep) |
 
 All deploy workflows require three GitHub secrets: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` (OIDC — no stored password).
@@ -180,4 +179,4 @@ az deployment group create \
 |---|---|
 | API server | [`backend/README.md`](backend/README.md) |
 | Web app | [`frontend/README.md`](frontend/README.md) |
-| Mobile app | [`mobile/README.md`](mobile/README.md) |
+| Mobile app | [`mobile-flutter/README.md`](mobile-flutter/README.md) |
