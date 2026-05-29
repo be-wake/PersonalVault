@@ -212,7 +212,7 @@ class _EventTile extends StatelessWidget {
         'Nov',
         'Dec'
       ];
-      return '${months[dt.month]} ${dt.day} Â· ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+      return '${months[dt.month]} ${dt.day} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
     } catch (_) {
       return iso;
     }

@@ -19,10 +19,9 @@ final apiClientProvider = Provider<ApiClient>((ref) {
   return ApiClient(ref.watch(storageProvider));
 });
 
-final authProvider =
-    StateNotifierProvider<AuthNotifier, AuthState>((ref) {
-  return AuthNotifier(ref.watch(apiClientProvider));
-});
+final authProvider = NotifierProvider<AuthNotifier, AuthState>(
+  AuthNotifier.new,
+);
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
@@ -46,11 +45,14 @@ class AuthState {
 
 /// Owns the auth lifecycle: restore-on-launch, login, register, and logout,
 /// keeping tokens in [ApiClient] in sync with [AuthState].
-class AuthNotifier extends StateNotifier<AuthState> {
-  final ApiClient _api;
+class AuthNotifier extends Notifier<AuthState> {
+  late final ApiClient _api;
 
-  AuthNotifier(this._api) : super(const AuthState(isLoading: true)) {
-    _restore();
+  @override
+  AuthState build() {
+    _api = ref.watch(apiClientProvider);
+    Future.microtask(_restore);
+    return const AuthState(isLoading: true);
   }
 
   Future<void> _restore() async {

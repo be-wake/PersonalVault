@@ -14,21 +14,11 @@ class WsState {
   const WsState(this.status);
 }
 
-final websocketProvider =
-    StateNotifierProvider<WebSocketNotifier, WsState>((ref) {
-  final notifier = WebSocketNotifier(ref);
-  ref.listen(authProvider, (prev, next) {
-    if (next.user != null && prev?.user == null) {
-      notifier.connect();
-    } else if (next.user == null && prev?.user != null) {
-      notifier.disconnect();
-    }
-  });
-  return notifier;
-});
+final websocketProvider = NotifierProvider<WebSocketNotifier, WsState>(
+  WebSocketNotifier.new,
+);
 
-class WebSocketNotifier extends StateNotifier<WsState> {
-  final Ref _ref;
+class WebSocketNotifier extends Notifier<WsState> {
   WebSocketChannel? _channel;
   Timer? _pingTimer;
   Timer? _reconnectTimer;
@@ -36,7 +26,18 @@ class WebSocketNotifier extends StateNotifier<WsState> {
   bool _intentionalClose = false;
   final List<WsHandler> _handlers = [];
 
-  WebSocketNotifier(this._ref) : super(const WsState(WsStatus.disconnected));
+  @override
+  WsState build() {
+    ref.listen(authProvider, (prev, next) {
+      if (next.user != null && prev?.user == null) {
+        connect();
+      } else if (next.user == null && prev?.user != null) {
+        disconnect();
+      }
+    });
+    ref.onDispose(disconnect);
+    return const WsState(WsStatus.disconnected);
+  }
 
   void connect() {
     if (state.status == WsStatus.connecting ||
@@ -48,7 +49,7 @@ class WebSocketNotifier extends StateNotifier<WsState> {
   }
 
   Future<void> _doConnect() async {
-    final token = await _ref.read(apiClientProvider).getStoredAccessToken();
+    final token = await ref.read(apiClientProvider).getStoredAccessToken();
     if (token == null) { return; }
 
     state = const WsState(WsStatus.connecting);
@@ -99,7 +100,7 @@ class WebSocketNotifier extends StateNotifier<WsState> {
   void _scheduleReconnect() {
     _reconnectTimer?.cancel();
     _reconnectTimer = Timer(Duration(seconds: _retryDelay), () {
-      _retryDelay = (_retryDelay * 2).clamp(1, 30);
+      _retryDelay = (_retryDelay * 2).clamp(1, 30).toInt();
       _doConnect();
     });
   }
@@ -116,9 +117,4 @@ class WebSocketNotifier extends StateNotifier<WsState> {
   void subscribe(WsHandler handler) => _handlers.add(handler);
   void unsubscribe(WsHandler handler) => _handlers.remove(handler);
 
-  @override
-  void dispose() {
-    disconnect();
-    super.dispose();
-  }
 }

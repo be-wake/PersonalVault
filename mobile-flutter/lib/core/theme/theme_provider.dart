@@ -6,11 +6,14 @@ const _kThemeKey = 'app_theme_mode';
 
 /// Holds the active [ThemeMode] and persists the user's choice to secure
 /// storage so it survives restarts.
-class ThemeNotifier extends StateNotifier<ThemeMode> {
-  final FlutterSecureStorage _storage;
+class ThemeNotifier extends Notifier<ThemeMode> {
+  late final FlutterSecureStorage _storage;
 
-  ThemeNotifier(this._storage) : super(ThemeMode.system) {
-    _load();
+  @override
+  ThemeMode build() {
+    _storage = const FlutterSecureStorage();
+    Future.microtask(_load);
+    return ThemeMode.system;
   }
 
   Future<void> _load() async {
@@ -29,7 +32,6 @@ class ThemeNotifier extends StateNotifier<ThemeMode> {
   }
 }
 
-final themeProvider = StateNotifierProvider<ThemeNotifier, ThemeMode>((ref) {
-  const storage = FlutterSecureStorage();
-  return ThemeNotifier(storage);
-});
+final themeProvider = NotifierProvider<ThemeNotifier, ThemeMode>(
+  ThemeNotifier.new,
+);

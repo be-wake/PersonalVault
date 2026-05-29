@@ -24,14 +24,9 @@ import 'shared/widgets/loading_spinner.dart';
 /// Drives go_router redirects from auth state: rebuilds routes when the user
 /// signs in/out and gates protected routes behind authentication.
 class _RouterNotifier extends ChangeNotifier {
-  final Ref _ref;
+  void onAuthChanged() => notifyListeners();
 
-  _RouterNotifier(this._ref) {
-    _ref.listen(authProvider, (_, __) => notifyListeners());
-  }
-
-  String? redirect(BuildContext context, GoRouterState state) {
-    final auth = _ref.read(authProvider);
+  String? redirect(AuthState auth, GoRouterState state) {
     final location = state.matchedLocation;
     final onSplash = location == '/splash';
 
@@ -53,14 +48,19 @@ class _RouterNotifier extends ChangeNotifier {
 }
 
 final _routerNotifierProvider =
-    ChangeNotifierProvider<_RouterNotifier>((ref) => _RouterNotifier(ref));
+    Provider<_RouterNotifier>((ref) {
+  final notifier = _RouterNotifier();
+  ref.listen<AuthState>(authProvider, (_, __) => notifier.onAuthChanged());
+  ref.onDispose(notifier.dispose);
+  return notifier;
+});
 
 final routerProvider = Provider<GoRouter>((ref) {
   final notifier = ref.watch(_routerNotifierProvider);
 
   return GoRouter(
     refreshListenable: notifier,
-    redirect: notifier.redirect,
+    redirect: (context, state) => notifier.redirect(ref.read(authProvider), state),
     initialLocation: '/splash',
     routes: [
       // Splash — shown while auth state is being restored from storage

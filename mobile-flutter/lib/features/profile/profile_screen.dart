@@ -31,11 +31,27 @@ class ProfileScreen extends ConsumerStatefulWidget {
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   File? _profilePhoto;
   bool _loadingPhoto = true;
+  final TextEditingController _nameController = TextEditingController();
+  final FocusNode _nameFocusNode = FocusNode();
+  bool _isEditingName = false;
+  bool _savingName = false;
 
   @override
   void initState() {
     super.initState();
     _loadPhoto();
+    _nameFocusNode.addListener(() {
+      if (!_nameFocusNode.hasFocus && _isEditingName) {
+        _saveNameInline();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _nameFocusNode.dispose();
+    super.dispose();
   }
 
   Future<void> _loadPhoto() async {
@@ -123,48 +139,30 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     }
   }
 
-  Future<void> _editName() async {
+  void _startInlineNameEdit() {
     final user = ref.read(authProvider).user!;
-    final ctrl = TextEditingController(text: user.name);
+    _nameController
+      ..text = user.name
+      ..selection = TextSelection.collapsed(offset: user.name.length);
+    setState(() => _isEditingName = true);
+    _nameFocusNode.requestFocus();
+  }
 
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Edit Name'),
-        content: TextField(
-          controller: ctrl,
-          autofocus: true,
-          decoration: const InputDecoration(
-            labelText: 'Full Name',
-            hintText: 'Your name',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
+  Future<void> _saveNameInline() async {
+    final user = ref.read(authProvider).user!;
+    final newName = _nameController.text.trim();
+    if (mounted) setState(() => _isEditingName = false);
 
-    // Read text BEFORE disposing — accessing a disposed controller throws an assertion
-    final newName = ctrl.text.trim();
-    ctrl.dispose();
-    if (confirmed != true || newName.isEmpty || newName == user.name) return;
+    if (newName.isEmpty || newName == user.name) {
+      _nameController.text = user.name;
+      return;
+    }
 
+    if (mounted) setState(() => _savingName = true);
     try {
       await ref.read(authProvider.notifier).updateName(newName);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Name updated')),
-        );
-      }
     } catch (e) {
+      _nameController.text = user.name;
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -172,6 +170,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               backgroundColor: AppColors.danger),
         );
       }
+    } finally {
+      if (mounted) setState(() => _savingName = false);
     }
   }
 
@@ -235,12 +235,19 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final user = ref.watch(authProvider).user!;
     final themeMode = ref.watch(themeProvider);
 
+    if (!_isEditingName && _nameController.text != user.name) {
+      _nameController.text = user.name;
+    }
+
     return Scaffold(
 
       appBar: AppBar(title: const Text('Profile')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
+      body: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: () => FocusScope.of(context).unfocus(),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
           children: [
             // ── Avatar ──────────────────────────────────────────────────────
             Stack(
@@ -300,17 +307,49 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(user.name,
-                    style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary)),
+                _isEditingName
+                    ? SizedBox(
+                        width: 220,
+                        child: TextField(
+                          controller: _nameController,
+                          focusNode: _nameFocusNode,
+                          autofocus: true,
+                          textAlign: TextAlign.center,
+                          textInputAction: TextInputAction.done,
+                          onSubmitted: (_) =>
+                              FocusScope.of(context).unfocus(),
+                          style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textPrimary),
+                          decoration: const InputDecoration(
+                            isDense: true,
+                            contentPadding:
+                                EdgeInsets.symmetric(vertical: 4),
+                            border: UnderlineInputBorder(),
+                          ),
+                        ),
+                      )
+                    : GestureDetector(
+                        onTap: _startInlineNameEdit,
+                        child: Text(user.name,
+                            style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textPrimary)),
+                      ),
                 const SizedBox(width: 6),
-                GestureDetector(
-                  onTap: _editName,
-                  child: const Icon(Icons.edit_outlined,
-                      size: 18, color: AppColors.textMuted),
-                ),
+                _savingName
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : GestureDetector(
+                        onTap: _startInlineNameEdit,
+                        child: const Icon(Icons.edit_outlined,
+                            size: 18, color: AppColors.textMuted),
+                      ),
               ],
             ),
             const SizedBox(height: 2),
@@ -335,17 +374,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 _InfoRow(
                     label: 'User ID',
                     value: '${user.id.substring(0, 8)}…'),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.badge_outlined,
-                      color: AppColors.accent),
-                  title: const Text('Edit Name'),
-                  subtitle: Text(user.name,
-                      style: const TextStyle(color: AppColors.textMuted)),
-                  trailing: const Icon(Icons.chevron_right,
-                      color: AppColors.textMuted),
-                  onTap: _editName,
-                ),
               ],
             ),
             const SizedBox(height: 12),
@@ -440,6 +468,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               onPressed: _signOut,
             ),
           ],
+          ),
         ),
       ),
     );
