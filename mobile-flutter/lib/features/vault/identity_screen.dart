@@ -11,6 +11,8 @@ import '../../shared/utils/error_utils.dart';
 import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/app_card.dart';
 import '../../shared/widgets/app_input.dart';
+import '../../shared/widgets/app_toast.dart';
+import '../../shared/widgets/confirm_dialog.dart';
 import '../../shared/widgets/loading_spinner.dart';
 
 final _identityProvider =
@@ -86,24 +88,17 @@ class IdentityScreen extends ConsumerStatefulWidget {
   ConsumerState<IdentityScreen> createState() => _IdentityScreenState();
 }
 
-class _IdentityScreenState extends ConsumerState<IdentityScreen> {
+class _IdentityScreenState extends ConsumerState<IdentityScreen>
+    with ToastHostMixin {
   bool _showForm = false;
   String _selectedType = _idTypes.first;
   final _numberCtrl = TextEditingController();
   bool _saving = false;
-  String? _toast;
 
   @override
   void dispose() {
     _numberCtrl.dispose();
     super.dispose();
-  }
-
-  void _showToast(String msg) {
-    setState(() => _toast = msg);
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) setState(() => _toast = null);
-    });
   }
 
   Future<void> _addDocument() async {
@@ -119,32 +114,17 @@ class _IdentityScreenState extends ConsumerState<IdentityScreen> {
       _numberCtrl.clear();
       setState(() => _showForm = false);
       ref.invalidate(_identityProvider);
-      _showToast('Document added');
+      showToast('Document added');
     } catch (e) {
-      _showToast(friendlyError(e));
+      showToast(friendlyError(e));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
   }
 
   Future<void> _deleteDocument(String docId) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete document?'),
-        content: const Text('This action cannot be undone.'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Delete',
-                  style: TextStyle(color: AppColors.danger))),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
+    final confirmed = await showConfirmDialog(context, title: 'Delete document?');
+    if (!confirmed) return;
     try {
       final api = ref.read(apiClientProvider);
       final userId = ref.read(authProvider).user!.id;
@@ -153,9 +133,9 @@ class _IdentityScreenState extends ConsumerState<IdentityScreen> {
       await _deleteImage(docId, 'front');
       await _deleteImage(docId, 'back');
       ref.invalidate(_identityProvider);
-      _showToast('Document deleted');
+      showToast('Document deleted');
     } catch (e) {
-      _showToast(friendlyError(e));
+      showToast(friendlyError(e));
     }
   }
 
@@ -247,7 +227,7 @@ class _IdentityScreenState extends ConsumerState<IdentityScreen> {
                       child: _DocumentCard(
                         doc: doc,
                         onDelete: () => _deleteDocument(doc.id),
-                        onToast: _showToast,
+                        onToast: showToast,
                       ),
                     ),
                   ),
@@ -266,23 +246,7 @@ class _IdentityScreenState extends ConsumerState<IdentityScreen> {
           ),
 
           // ── Toast ─────────────────────────────────────────────────────────
-          if (_toast != null)
-            Positioned(
-              bottom: 24,
-              left: 24,
-              right: 24,
-              child: Material(
-                borderRadius: BorderRadius.circular(10),
-                color: AppColors.accentDark,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 12),
-                  child: Text(_toast!,
-                      style: const TextStyle(
-                          color: Colors.white, fontSize: 14)),
-                ),
-              ),
-            ),
+          toastOverlay(),
         ],
       ),
     );

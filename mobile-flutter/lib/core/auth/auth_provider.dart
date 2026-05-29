@@ -4,6 +4,11 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../models/user.dart';
 import '../network/api_client.dart';
 
+// ApiClient's endpoint methods are extensions split across api_client.*.dart
+// part files. Re-export the library so any consumer of `apiClientProvider`
+// gets those extension methods in scope without importing the path directly.
+export '../network/api_client.dart';
+
 // ── Providers ────────────────────────────────────────────────────────────────
 
 final storageProvider = Provider<FlutterSecureStorage>((ref) {

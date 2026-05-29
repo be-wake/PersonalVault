@@ -20,15 +20,9 @@ namespace PersonalDataVault.Api.Controllers;
 public class VaultController(
     IVaultRepository vault,
     IAuditRepository audit,
-    ICryptoService crypto,
-    IConfiguration config) : ControllerBase
+    ICryptoService crypto) : VaultControllerBase
 {
     private static readonly HashSet<string> AllowedCardTypes = ["visa", "mastercard", "amex", "discover", "rupay"];
-
-    private string UserId =>
-        User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub") ?? string.Empty;
-
-    private string RequestId => HttpContext.Items["RequestId"]?.ToString() ?? "unknown";
 
     // ── Identity ──────────────────────────────────────────────────────────────
 
@@ -336,35 +330,6 @@ public class VaultController(
     };
 
     // ── Helpers ───────────────────────────────────────────────────────────────
-
-    /// <summary>
-    /// Verifies the X-PDV-Stepup header when STEPUP_ENFORCED is true.
-    /// Returns null (pass-through) if not enforced or token is valid.
-    /// </summary>
-    private IActionResult? RequireStepUp(string intent)
-    {
-        var enforced = config.GetValue<bool>("StepUp:Enforced", false);
-        if (!enforced) return null;
-
-        var header = Request.Headers["X-PDV-Stepup"].FirstOrDefault();
-        if (string.IsNullOrEmpty(header))
-            return StatusCode(401, new { error = new { code = "STEPUP_REQUIRED", message = "This action requires a recent re-authentication.", intent, requestId = RequestId, timestamp = DateTime.UtcNow.ToString("o") } });
-
-        try
-        {
-            var tokenSvc = HttpContext.RequestServices.GetRequiredService<ITokenService>();
-            var principal = tokenSvc.VerifyStepUpToken(header);
-            var sub = principal.FindFirstValue(ClaimTypes.NameIdentifier) ?? principal.FindFirstValue("sub");
-            var claimIntent = principal.FindFirstValue("intent");
-            if (sub != UserId || claimIntent != TokenService.IntentHash(intent))
-                throw new Exception("Step-up token mismatch");
-            return null;
-        }
-        catch
-        {
-            return StatusCode(401, ApiError.Unauthorized("STEPUP_INVALID", "Step-up token is invalid or expired.", RequestId));
-        }
-    }
 
     /// <summary>Decrypts the common-info record (name / DOB / email).</summary>
     private object? DecryptCommonIdentity(IdentityData? id)

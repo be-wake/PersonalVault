@@ -8,6 +8,8 @@ import '../../shared/utils/error_utils.dart';
 import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/app_card.dart';
 import '../../shared/widgets/app_input.dart';
+import '../../shared/widgets/app_toast.dart';
+import '../../shared/widgets/confirm_dialog.dart';
 import '../../shared/widgets/loading_spinner.dart';
 
 // ── Provider ──────────────────────────────────────────────────────────────────
@@ -33,46 +35,19 @@ class ContactsScreen extends ConsumerStatefulWidget {
   ConsumerState<ContactsScreen> createState() => _ContactsScreenState();
 }
 
-class _ContactsScreenState extends ConsumerState<ContactsScreen> {
-  String? _toast;
-  bool _toastSuccess = true;
-
-  void _showToast(String msg, {bool success = true}) {
-    setState(() {
-      _toast = msg;
-      _toastSuccess = success;
-    });
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) setState(() => _toast = null);
-    });
-  }
-
+class _ContactsScreenState extends ConsumerState<ContactsScreen>
+    with ToastHostMixin {
   Future<void> _deleteContact(String contactId) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete contact?'),
-        content: const Text('This action cannot be undone.'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Delete',
-                  style: TextStyle(color: AppColors.danger))),
-        ],
-      ),
-    );
-    if (ok != true) return;
+    final ok = await showConfirmDialog(context, title: 'Delete contact?');
+    if (!ok) return;
     try {
       final api = ref.read(apiClientProvider);
       final userId = ref.read(authProvider).user!.id;
       await api.deleteContact(userId, contactId);
       ref.invalidate(_contactsProvider);
-      _showToast('Contact deleted');
+      showToast('Contact deleted');
     } catch (e) {
-      _showToast(friendlyError(e), success: false);
+      showToast(friendlyError(e), success: false);
     }
   }
 
@@ -89,7 +64,7 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
           final userId = ref.read(authProvider).user!.id;
           await api.addContact(userId, data);
           ref.invalidate(_contactsProvider);
-          _showToast('Contact added');
+          showToast('Contact added');
         },
       ),
     );
@@ -108,7 +83,7 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
           final userId = ref.read(authProvider).user!.id;
           await api.updateContact(userId, contact.id, data);
           ref.invalidate(_contactsProvider);
-          _showToast('Contact updated');
+          showToast('Contact updated');
         },
       ),
     );
@@ -121,7 +96,7 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
     final granted = status == PermissionStatus.granted ||
         status == PermissionStatus.limited;
     if (!granted) {
-      if (mounted) _showToast('Contacts permission denied', success: false);
+      if (mounted) showToast('Contacts permission denied', success: false);
       return;
     }
 
@@ -133,7 +108,7 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
     if (!mounted) return;
 
     if (deviceContacts.isEmpty) {
-      _showToast('No contacts found on device', success: false);
+      showToast('No contacts found on device', success: false);
       return;
     }
 
@@ -169,7 +144,7 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
 
     if (!mounted) return;
     ref.invalidate(_contactsProvider);
-    _showToast('Imported $saved contact${saved == 1 ? '' : 's'}');
+    showToast('Imported $saved contact${saved == 1 ? '' : 's'}');
   }
 
   @override
@@ -234,24 +209,7 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
           ),
 
           // ── Toast ───────────────────────────────────────────────────────
-          if (_toast != null)
-            Positioned(
-              bottom: 24,
-              left: 24,
-              right: 24,
-              child: Material(
-                borderRadius: BorderRadius.circular(10),
-                color: _toastSuccess
-                    ? AppColors.accentDark
-                    : AppColors.danger,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 12),
-                  child: Text(_toast!,
-                      style: const TextStyle(color: Colors.white)),
-                ),
-              ),
-            ),
+          toastOverlay(),
         ],
       ),
     );

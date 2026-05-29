@@ -2,6 +2,20 @@ import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../constants/api_constants.dart';
 
+// Endpoint methods are grouped by feature into these part files. They are
+// `extension`s on ApiClient living in the same library, so they share the
+// private Dio client and token state without exposing it publicly.
+part 'api_client.auth.dart';
+part 'api_client.vault.dart';
+part 'api_client.consents.dart';
+part 'api_client.account.dart';
+
+/// HTTP core for the PDV API.
+///
+/// Responsibilities kept here: building the Dio client, attaching the bearer
+/// token on every request, and transparently refreshing the session (single
+/// flight) when the API returns 401. The actual REST endpoints live in the
+/// `api_client.*.dart` part files, grouped by feature.
 class ApiClient {
   late final Dio _dio;
   final FlutterSecureStorage _storage;
@@ -115,199 +129,4 @@ class ApiClient {
   }
 
   Future<String?> getStoredAccessToken() => _storage.read(key: kAccessTokenKey);
-
-  // ── Auth ────────────────────────────────────────────────────────────────────
-
-  Future<Map<String, dynamic>> login(String email, String password) async {
-    final resp = await _dio.post('/auth/login', data: {
-      'email': email,
-      'password': password,
-    });
-    return resp.data as Map<String, dynamic>;
-  }
-
-  Future<Map<String, dynamic>> register(
-      String name, String email, String password) async {
-    final resp = await _dio.post('/auth/register', data: {
-      'name': name,
-      'email': email,
-      'password': password,
-    });
-    return resp.data as Map<String, dynamic>;
-  }
-
-  Future<Map<String, dynamic>> getMe() async {
-    final resp = await _dio.get('/auth/me');
-    return resp.data as Map<String, dynamic>;
-  }
-
-  // ── Identity ────────────────────────────────────────────────────────────────
-
-  Future<Map<String, dynamic>> getIdentity(String userId) async {
-    final resp = await _dio.get('/v1/identity/$userId');
-    return resp.data as Map<String, dynamic>;
-  }
-
-  Future<void> updateIdentity(String userId, Map<String, dynamic> data) async {
-    await _dio.put('/v1/identity/$userId', data: data);
-  }
-
-  Future<Map<String, dynamic>> addDocument(
-      String userId, Map<String, dynamic> data) async {
-    final resp = await _dio.post('/v1/identity/$userId/documents', data: data);
-    return resp.data as Map<String, dynamic>;
-  }
-
-  Future<void> updateDocument(
-      String userId, String docId, Map<String, dynamic> data) async {
-    await _dio.put('/v1/identity/$userId/documents/$docId', data: data);
-  }
-
-  Future<void> deleteDocument(String userId, String docId) async {
-    await _dio.delete('/v1/identity/$userId/documents/$docId');
-  }
-
-  // ── Address ─────────────────────────────────────────────────────────────────
-
-  Future<List<dynamic>> getAddresses(String userId) async {
-    final resp = await _dio.get('/v1/address/$userId');
-    return (resp.data as Map<String, dynamic>)['addresses'] as List<dynamic>;
-  }
-
-  Future<Map<String, dynamic>> addAddress(
-      String userId, Map<String, dynamic> data) async {
-    final resp = await _dio.post('/v1/address/$userId', data: data);
-    return resp.data as Map<String, dynamic>;
-  }
-
-  Future<void> updateAddress(
-      String userId, String addrId, Map<String, dynamic> data) async {
-    await _dio.put('/v1/address/$userId/$addrId', data: data);
-  }
-
-  Future<void> deleteAddress(String userId, String addrId) async {
-    await _dio.delete('/v1/address/$userId/$addrId');
-  }
-
-  Future<void> setPrimaryAddress(String userId, String addrId) async {
-    await _dio.put('/v1/address/$userId/$addrId/primary');
-  }
-
-  // ── Payment ─────────────────────────────────────────────────────────────────
-
-  Future<List<dynamic>> getCards(String userId) async {
-    final resp = await _dio.get('/v1/payment/$userId/cards');
-    return (resp.data as Map<String, dynamic>)['cards'] as List<dynamic>;
-  }
-
-  Future<Map<String, dynamic>> addCard(
-      String userId, Map<String, dynamic> data) async {
-    final resp = await _dio.post('/v1/payment/$userId/cards', data: data);
-    return resp.data as Map<String, dynamic>;
-  }
-
-  Future<void> deleteCard(String userId, String cardId) async {
-    await _dio.delete('/v1/payment/$userId/cards/$cardId');
-  }
-
-  // ── Contacts ────────────────────────────────────────────────────────────────
-
-  Future<List<dynamic>> getContacts(String userId) async {
-    final resp = await _dio.get('/v1/contacts/$userId');
-    return (resp.data as Map<String, dynamic>)['contacts'] as List<dynamic>;
-  }
-
-  Future<Map<String, dynamic>> addContact(
-      String userId, Map<String, dynamic> data) async {
-    final resp = await _dio.post('/v1/contacts/$userId', data: data);
-    return resp.data as Map<String, dynamic>;
-  }
-
-  Future<void> updateContact(
-      String userId, String contactId, Map<String, dynamic> data) async {
-    await _dio.put('/v1/contacts/$userId/$contactId', data: data);
-  }
-
-  Future<void> deleteContact(String userId, String contactId) async {
-    await _dio.delete('/v1/contacts/$userId/$contactId');
-  }
-
-  // ── Consents ─────────────────────────────────────────────────────────────────
-
-  Future<List<dynamic>> getConsents(String userId) async {
-    final resp = await _dio.get('/v1/consents/$userId');
-    return (resp.data as Map<String, dynamic>)['grants'] as List<dynamic>;
-  }
-
-  Future<Map<String, dynamic>> getConsent(
-      String userId, String grantId) async {
-    final resp = await _dio.get('/v1/consents/$userId/$grantId');
-    return (resp.data as Map<String, dynamic>)['grant'] as Map<String, dynamic>;
-  }
-
-  Future<Map<String, dynamic>> grantConsent(Map<String, dynamic> data) async {
-    final resp = await _dio.post('/v1/consents', data: data);
-    return resp.data as Map<String, dynamic>;
-  }
-
-  Future<void> revokeConsent(String grantId) async {
-    await _dio.delete('/v1/consents/$grantId');
-  }
-
-  // ── Relying Parties ──────────────────────────────────────────────────────────
-
-  Future<List<dynamic>> getRelyingParties() async {
-    final resp = await _dio.get('/v1/relying-parties');
-    return (resp.data as Map<String, dynamic>)['relyingParties'] as List<dynamic>;
-  }
-
-  // ── Audit ────────────────────────────────────────────────────────────────────
-
-  Future<List<dynamic>> getAuditEvents(
-    String userId, {
-    String? resource,
-    String? from,
-    String? to,
-    int limit = 50,
-  }) async {
-    final resp = await _dio.get(
-      '/v1/audit/$userId',
-      queryParameters: {
-        'limit': limit,
-        if (resource != null) 'resource': resource,
-        if (from != null) 'from': from,
-        if (to != null) 'to': to,
-      },
-    );
-    return (resp.data as Map<String, dynamic>)['events'] as List<dynamic>;
-  }
-
-  // ── Account / GDPR ───────────────────────────────────────────────────────────
-
-  Future<Map<String, dynamic>> updateName(String name) async {
-    final resp = await _dio.patch('/v1/account/name', data: {'name': name});
-    return resp.data as Map<String, dynamic>;
-  }
-
-  Future<Map<String, dynamic>> exportData() async {
-    final resp = await _dio.get('/v1/account/export');
-    return resp.data as Map<String, dynamic>;
-  }
-
-  Future<void> deleteVaultResource(String resource) async {
-    await _dio.delete('/v1/account/vault/$resource');
-  }
-
-  Future<Map<String, dynamic>> getDashboardStats(String userId) async {
-    final results = await Future.wait([
-      getConsents(userId),
-      getAuditEvents(userId, limit: 5),
-    ]);
-    return {
-      'activeConsents': (results[0])
-          .where((c) => (c as Map)['status'] == 'ACTIVE')
-          .length,
-      'recentEvents': results[1],
-    };
-  }
 }

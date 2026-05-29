@@ -17,14 +17,8 @@ public class ConsentsController(
     IAuditRepository audit,
     IRevocationCacheService revocationCache,
     IServiceBusService serviceBus,
-    IWebSocketConnectionManager wsManager,
-    IConfiguration config) : ControllerBase
+    IWebSocketConnectionManager wsManager) : VaultControllerBase
 {
-    private string UserId =>
-        User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub") ?? string.Empty;
-
-    private string RequestId => HttpContext.Items["RequestId"]?.ToString() ?? "unknown";
-
     // ── GET /v1/consents/:userId ──────────────────────────────────────────────
 
     [HttpGet("{userId}")]
@@ -134,30 +128,4 @@ public class ConsentsController(
             PciScope    = g.RpPciScope,
         },
     };
-
-    private IActionResult? RequireStepUp(string intent)
-    {
-        var enforced = config.GetValue<bool>("StepUp:Enforced", false);
-        if (!enforced) return null;
-
-        var header = Request.Headers["X-PDV-Stepup"].FirstOrDefault();
-        if (string.IsNullOrEmpty(header))
-            return StatusCode(401, new { error = new { code = "STEPUP_REQUIRED", message = "This action requires a recent re-authentication.", intent, requestId = RequestId } });
-
-        try
-        {
-            var tokenSvc = HttpContext.RequestServices.GetRequiredService<ITokenService>();
-            var principal = tokenSvc.VerifyStepUpToken(header);
-            var sub = principal.FindFirstValue(System.Security.Claims.ClaimTypes.NameIdentifier)
-                      ?? principal.FindFirstValue("sub");
-            var claimIntent = principal.FindFirstValue("intent");
-            if (sub != UserId || claimIntent != TokenService.IntentHash(intent))
-                throw new Exception("Step-up token mismatch");
-            return null;
-        }
-        catch
-        {
-            return StatusCode(401, ApiError.Unauthorized("STEPUP_INVALID", "Step-up token is invalid or expired.", RequestId));
-        }
-    }
 }

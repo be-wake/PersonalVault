@@ -7,6 +7,8 @@ import '../../shared/utils/error_utils.dart';
 import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/app_card.dart';
 import '../../shared/widgets/app_input.dart';
+import '../../shared/widgets/app_toast.dart';
+import '../../shared/widgets/confirm_dialog.dart';
 import '../../shared/widgets/loading_spinner.dart';
 
 final _addressesProvider =
@@ -28,7 +30,8 @@ class AddressScreen extends ConsumerStatefulWidget {
   ConsumerState<AddressScreen> createState() => _AddressScreenState();
 }
 
-class _AddressScreenState extends ConsumerState<AddressScreen> {
+class _AddressScreenState extends ConsumerState<AddressScreen>
+    with ToastHostMixin {
   bool _showForm = false;
   String _selectedLabel = _labels.first;
   final _name = TextEditingController();
@@ -39,7 +42,6 @@ class _AddressScreenState extends ConsumerState<AddressScreen> {
   final _postal = TextEditingController();
   final _country = TextEditingController();
   bool _saving = false;
-  String? _toast;
 
   @override
   void dispose() {
@@ -47,13 +49,6 @@ class _AddressScreenState extends ConsumerState<AddressScreen> {
       c.dispose();
     }
     super.dispose();
-  }
-
-  void _showToast(String msg) {
-    setState(() => _toast = msg);
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) setState(() => _toast = null);
-    });
   }
 
   void _resetForm() {
@@ -82,40 +77,25 @@ class _AddressScreenState extends ConsumerState<AddressScreen> {
       _resetForm();
       setState(() => _showForm = false);
       ref.invalidate(_addressesProvider);
-      _showToast('Address added');
+      showToast('Address added');
     } catch (e) {
-      _showToast(friendlyError(e));
+      showToast(friendlyError(e));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
   }
 
   Future<void> _deleteAddress(String addrId) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete address?'),
-        content: const Text('This action cannot be undone.'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Delete',
-                  style: TextStyle(color: AppColors.danger))),
-        ],
-      ),
-    );
-    if (ok != true) return;
+    final ok = await showConfirmDialog(context, title: 'Delete address?');
+    if (!ok) return;
     try {
       final api = ref.read(apiClientProvider);
       final userId = ref.read(authProvider).user!.id;
       await api.deleteAddress(userId, addrId);
       ref.invalidate(_addressesProvider);
-      _showToast('Address deleted');
+      showToast('Address deleted');
     } catch (e) {
-      _showToast(friendlyError(e));
+      showToast(friendlyError(e));
     }
   }
 
@@ -125,9 +105,9 @@ class _AddressScreenState extends ConsumerState<AddressScreen> {
       final userId = ref.read(authProvider).user!.id;
       await api.setPrimaryAddress(userId, addrId);
       ref.invalidate(_addressesProvider);
-      _showToast('Primary address updated');
+      showToast('Primary address updated');
     } catch (e) {
-      _showToast(friendlyError(e));
+      showToast(friendlyError(e));
     }
   }
 
@@ -143,7 +123,7 @@ class _AddressScreenState extends ConsumerState<AddressScreen> {
           final userId = ref.read(authProvider).user!.id;
           await api.updateAddress(userId, addr.id, data);
           ref.invalidate(_addressesProvider);
-          _showToast('Address updated');
+          showToast('Address updated');
         },
       ),
     );
@@ -279,22 +259,7 @@ class _AddressScreenState extends ConsumerState<AddressScreen> {
           ),
 
           // ── Toast ─────────────────────────────────────────────────────────
-          if (_toast != null)
-            Positioned(
-              bottom: 24,
-              left: 24,
-              right: 24,
-              child: Material(
-                borderRadius: BorderRadius.circular(10),
-                color: AppColors.accentDark,
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  child: Text(_toast!,
-                      style: const TextStyle(color: Colors.white)),
-                ),
-              ),
-            ),
+          toastOverlay(),
         ],
       ),
     );

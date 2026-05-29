@@ -26,14 +26,8 @@ public class AccountController(
     IVaultRepository vault,
     IConsentRepository consents,
     IAuditRepository audit,
-    ICryptoService crypto,
-    IConfiguration config) : ControllerBase
+    ICryptoService crypto) : VaultControllerBase
 {
-    private string UserId =>
-        User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub") ?? string.Empty;
-
-    private string RequestId => HttpContext.Items["RequestId"]?.ToString() ?? "unknown";
-
     private static readonly HashSet<string> ValidResources = ["identity", "address", "payment", "contacts"];
 
     // ── PATCH /v1/account/name ────────────────────────────────────────────────
@@ -188,30 +182,6 @@ public class AccountController(
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
-
-    private IActionResult? RequireStepUp(string intent)
-    {
-        var enforced = config.GetValue<bool>("StepUp:Enforced", false);
-        if (!enforced) return null;
-
-        var header = Request.Headers["X-PDV-Stepup"].FirstOrDefault();
-        if (string.IsNullOrEmpty(header))
-            return StatusCode(401, new { error = new { code = "STEPUP_REQUIRED", message = "This action requires a recent re-authentication.", intent, requestId = RequestId } });
-
-        try
-        {
-            var tokenSvc  = HttpContext.RequestServices.GetRequiredService<ITokenService>();
-            var principal = tokenSvc.VerifyStepUpToken(header);
-            var sub = principal.FindFirstValue(ClaimTypes.NameIdentifier) ?? principal.FindFirstValue("sub");
-            if (sub != UserId || principal.FindFirstValue("intent") != TokenService.IntentHash(intent))
-                throw new Exception("Step-up token mismatch");
-            return null;
-        }
-        catch
-        {
-            return StatusCode(401, ApiError.Unauthorized("STEPUP_INVALID", "Step-up token is invalid or expired.", RequestId));
-        }
-    }
 
     private object? DecryptIdentity(Data.Models.IdentityData? id)
     {

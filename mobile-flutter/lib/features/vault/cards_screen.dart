@@ -8,6 +8,8 @@ import '../../shared/utils/error_utils.dart';
 import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/app_card.dart';
 import '../../shared/widgets/app_input.dart';
+import '../../shared/widgets/app_toast.dart';
+import '../../shared/widgets/confirm_dialog.dart';
 import '../../shared/widgets/loading_spinner.dart';
 
 // ── Expiry formatter ──────────────────────────────────────────────────────────
@@ -72,14 +74,13 @@ class CardsScreen extends ConsumerStatefulWidget {
   ConsumerState<CardsScreen> createState() => _CardsScreenState();
 }
 
-class _CardsScreenState extends ConsumerState<CardsScreen> {
+class _CardsScreenState extends ConsumerState<CardsScreen> with ToastHostMixin {
   bool _showForm = false;
   String _selectedType = _cardTypes.first;
   final _last4 = TextEditingController();
   final _expiry = TextEditingController();
   final _nickname = TextEditingController();
   bool _saving = false;
-  String? _toast;
 
   @override
   void dispose() {
@@ -87,13 +88,6 @@ class _CardsScreenState extends ConsumerState<CardsScreen> {
     _expiry.dispose();
     _nickname.dispose();
     super.dispose();
-  }
-
-  void _showToast(String msg) {
-    setState(() => _toast = msg);
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) setState(() => _toast = null);
-    });
   }
 
   void _resetForm() {
@@ -105,11 +99,11 @@ class _CardsScreenState extends ConsumerState<CardsScreen> {
 
   Future<void> _addCard() async {
     if (_last4.text.length != 4 || !RegExp(r'^\d{4}$').hasMatch(_last4.text)) {
-      _showToast('Last 4 digits must be exactly 4 numbers');
+      showToast('Last 4 digits must be exactly 4 numbers');
       return;
     }
     if (!RegExp(r'^\d{2}/\d{2}$').hasMatch(_expiry.text)) {
-      _showToast('Expiry must be MM/YY');
+      showToast('Expiry must be MM/YY');
       return;
     }
     setState(() => _saving = true);
@@ -125,40 +119,26 @@ class _CardsScreenState extends ConsumerState<CardsScreen> {
       _resetForm();
       setState(() => _showForm = false);
       ref.invalidate(_cardsProvider);
-      _showToast('Card added');
+      showToast('Card added');
     } catch (e) {
-      _showToast(friendlyError(e));
+      showToast(friendlyError(e));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
   }
 
   Future<void> _deleteCard(String cardId) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Remove card?'),
-        content: const Text('This action cannot be undone.'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Remove',
-                  style: TextStyle(color: AppColors.danger))),
-        ],
-      ),
-    );
-    if (ok != true) return;
+    final ok = await showConfirmDialog(context,
+        title: 'Remove card?', confirmLabel: 'Remove');
+    if (!ok) return;
     try {
       final api = ref.read(apiClientProvider);
       final userId = ref.read(authProvider).user!.id;
       await api.deleteCard(userId, cardId);
       ref.invalidate(_cardsProvider);
-      _showToast('Card removed');
+      showToast('Card removed');
     } catch (e) {
-      _showToast(friendlyError(e));
+      showToast(friendlyError(e));
     }
   }
 
@@ -280,22 +260,7 @@ class _CardsScreenState extends ConsumerState<CardsScreen> {
           ),
 
           // ── Toast ──────────────────────────────────────────────────────
-          if (_toast != null)
-            Positioned(
-              bottom: 24,
-              left: 24,
-              right: 24,
-              child: Material(
-                borderRadius: BorderRadius.circular(10),
-                color: AppColors.accentDark,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 12),
-                  child: Text(_toast!,
-                      style: const TextStyle(color: Colors.white)),
-                ),
-              ),
-            ),
+          toastOverlay(),
         ],
       ),
     );
