@@ -66,6 +66,30 @@ public class DatabaseInitializer(AppDbContext db, ILogger<DatabaseInitializer> l
                 replaced_by_jti TEXT
             )
             """,
+                        // Legacy compatibility: older deployments may have refresh_tokens without
+                        // an "id" column (jti key). Ensure it exists and is populated so EF can
+                        // insert/query using the current model key mapping.
+                        "ALTER TABLE refresh_tokens ADD COLUMN IF NOT EXISTS id TEXT",
+                        """
+                        DO $$
+                        BEGIN
+                                IF EXISTS (
+                                        SELECT 1
+                                        FROM information_schema.columns
+                                        WHERE table_schema = 'public'
+                                            AND table_name   = 'refresh_tokens'
+                                            AND column_name  = 'jti'
+                                ) THEN
+                                        EXECUTE 'UPDATE refresh_tokens SET id = jti WHERE id IS NULL';
+                                END IF;
+                        END $$;
+                        """,
+                        """
+                        UPDATE refresh_tokens
+                        SET id = md5(random()::text || clock_timestamp()::text)
+                        WHERE id IS NULL
+                        """,
+                        "CREATE UNIQUE INDEX IF NOT EXISTS uq_refresh_tokens_id ON refresh_tokens (id)",
         };
 
         foreach (var sql in migrations)
