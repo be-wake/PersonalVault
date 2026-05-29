@@ -75,14 +75,14 @@ jobs:
 
       - name: Upload APK artifact
         if: ${{ steps.artifact.outputs.type == 'apk' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: android-apk
           path: mobile-flutter/build/app/outputs/flutter-apk/*.apk
 
       - name: Upload AAB artifact
         if: ${{ steps.artifact.outputs.type == 'aab' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: android-aab
           path: mobile-flutter/build/app/outputs/bundle/release/*.aab
