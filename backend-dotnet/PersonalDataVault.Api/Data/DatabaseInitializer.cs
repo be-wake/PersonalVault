@@ -66,10 +66,20 @@ public class DatabaseInitializer(AppDbContext db, ILogger<DatabaseInitializer> l
                 replaced_by_jti TEXT
             )
             """,
-                        // Legacy compatibility: older deployments may have refresh_tokens without
-                        // an "id" column (jti key). Ensure it exists and is populated so EF can
-                        // insert/query using the current model key mapping.
-                        "ALTER TABLE refresh_tokens ADD COLUMN IF NOT EXISTS id TEXT",
+                        // Legacy compatibility: older deployments may have a refresh_tokens table
+                        // that predates the current model and is missing columns. Because the
+                        // CREATE TABLE above is IF NOT EXISTS, it is skipped for such tables and
+                        // the columns are never added — back-fill every required column here so
+                        // EF can insert/query using the current model mapping. NOT NULL columns
+                        // get a DEFAULT so adding them to a table with existing rows succeeds;
+                        // EF supplies real values on every insert, so the default only affects
+                        // pre-existing legacy rows.
+                        "ALTER TABLE refresh_tokens ADD COLUMN IF NOT EXISTS id              TEXT",
+                        "ALTER TABLE refresh_tokens ADD COLUMN IF NOT EXISTS user_id         TEXT",
+                        "ALTER TABLE refresh_tokens ADD COLUMN IF NOT EXISTS created_at      TIMESTAMPTZ NOT NULL DEFAULT now()",
+                        "ALTER TABLE refresh_tokens ADD COLUMN IF NOT EXISTS expires_at      TIMESTAMPTZ NOT NULL DEFAULT now()",
+                        "ALTER TABLE refresh_tokens ADD COLUMN IF NOT EXISTS revoked_at      TIMESTAMPTZ",
+                        "ALTER TABLE refresh_tokens ADD COLUMN IF NOT EXISTS replaced_by_jti TEXT",
                         """
                         DO $$
                         BEGIN
