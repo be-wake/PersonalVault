@@ -234,10 +234,10 @@ packages:
     dependency: "direct main"
     description:
       name: flutter_contacts
-      sha256: "558247c39d89ca738aceb7859b6147a0ede0a5084492cffa215db87dea672479"
+      sha256: c2591314166678adab23ef02a0ab3b4d4da71071dc03519de3dc059982dcfef2
       url: "https://pub.dev"
     source: hosted
-    version: "2.2.0"
+    version: "2.2.2"
   flutter_launcher_icons:
     dependency: "direct main"
     description:
